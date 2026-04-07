@@ -62,9 +62,13 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                     );
                     continue;
                 }
+                SchemaIdentity schemaIdentity = resolveSchemaIdentity(typeElement);
+                if (schemaIdentity == null) {
+                    continue;
+                }
                 List<FieldSpec> fields = collectFields(typeElement);
                 generateFieldsType(typeElement, fields);
-                generateSchemaType(typeElement, fields);
+                generateSchemaType(typeElement, fields, schemaIdentity);
                 generateSchemaProviderType(typeElement);
             }
         }
@@ -171,14 +175,12 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         }
     }
 
-    private void generateSchemaType(TypeElement typeElement, List<FieldSpec> fields) {
+    private void generateSchemaType(TypeElement typeElement, List<FieldSpec> fields, SchemaIdentity schemaIdentity) {
         PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
         String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
         String simpleName = typeElement.getSimpleName() + "_PiSchema";
         String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
-        String schemaId = packageName.isEmpty()
-                ? typeElement.getSimpleName().toString()
-                : packageName + "." + typeElement.getSimpleName();
+        String schemaId = schemaIdentity.id();
         int version = typeElement.getAnnotation(PiSyncModel.class).version();
         int fieldCount = fields.size();
         try {
@@ -188,6 +190,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                     writer.write("package " + packageName + ";\n\n");
                 }
                 writer.write("import net.minecraft.nbt.CompoundTag;\n");
+                writer.write("import net.minecraft.resources.ResourceLocation;\n");
                 writer.write("import java.util.List;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiDecodeContext;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiDirtySet;\n");
@@ -209,7 +212,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 } else {
                     writer.write("    public static final List<PiFieldDescriptor> FIELDS = List.of();\n\n");
                 }
-                writeBindingConstant(writer, typeElement);
+                writeBindingConstant(writer, typeElement, schemaIdentity);
                 writer.write("    public static CompoundTag saveFull(" + typeElement.getSimpleName() + " self) {\n");
                 writeTagWithHeader(writer, fields);
                 writer.write("    }\n\n");
@@ -428,9 +431,17 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         }
     }
 
-    private void writeBindingConstant(Writer writer, TypeElement typeElement) throws IOException {
+    private void writeBindingConstant(Writer writer, TypeElement typeElement, SchemaIdentity schemaIdentity) throws IOException {
         String typeName = typeElement.getSimpleName().toString();
         writer.write("    public static final PiStateBinding<" + typeName + "> BINDING = new PiStateBinding<>() {\n");
+        writer.write("        @Override\n");
+        writer.write("        public ResourceLocation schemaId() {\n");
+        writer.write("            return ResourceLocation.fromNamespaceAndPath(\"" + schemaIdentity.namespace() + "\", \"" + schemaIdentity.path() + "\");\n");
+        writer.write("        }\n\n");
+        writer.write("        @Override\n");
+        writer.write("        public int version() {\n");
+        writer.write("            return VERSION;\n");
+        writer.write("        }\n\n");
         writer.write("        @Override\n");
         writer.write("        public Class<" + typeName + "> stateType() {\n");
         writer.write("            return " + typeName + ".class;\n");
@@ -464,6 +475,24 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         writer.write("            " + typeName + "_PiSchema.applyDelta(self, tag, context);\n");
         writer.write("        }\n");
         writer.write("    };\n\n");
+    }
+
+    private SchemaIdentity resolveSchemaIdentity(TypeElement typeElement) {
+        PiSyncModel annotation = typeElement.getAnnotation(PiSyncModel.class);
+        if (annotation == null) {
+            return null;
+        }
+        String id = annotation.id();
+        int delimiter = id.indexOf(':');
+        if (delimiter <= 0 || delimiter == id.length() - 1) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiSyncModel.id must be a namespace:path resource location",
+                    typeElement
+            );
+            return null;
+        }
+        return new SchemaIdentity(id, id.substring(0, delimiter), id.substring(delimiter + 1));
     }
 
     private String constantName(String simpleName) {
@@ -607,6 +636,9 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     }
 
     private record FieldSpec(int index, String constantName, String fieldName, String id, String javaType, String syncScope, boolean persist) {
+    }
+
+    private record SchemaIdentity(String id, String namespace, String path) {
     }
 
     private record LivingServiceSpec(

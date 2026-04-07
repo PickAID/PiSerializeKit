@@ -10,6 +10,9 @@ class PiSchemasTest {
     void resolvesBindingByStateTypeThroughServiceLoader() {
         PiStateBinding<TestSchemaProvider.TestState> binding = PiSchemas.require(TestSchemaProvider.TestState.class);
 
+        assertEquals(TestSchemaProvider.SCHEMA_ID, binding.schemaId());
+        assertEquals(TestSchemaProvider.SCHEMA_VERSION, binding.version());
+
         assertEquals(TestSchemaProvider.TestState.class, binding.stateType());
         assertEquals(1, binding.fields().size());
         assertEquals(TestSchemaProvider.VALUE, binding.fields().get(0).key());

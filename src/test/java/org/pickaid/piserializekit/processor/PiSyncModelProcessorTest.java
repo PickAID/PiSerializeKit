@@ -20,7 +20,7 @@ class PiSyncModelProcessorTest {
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
-                "@PiSyncModel(version = 2)",
+                "@PiSyncModel(id = \"example:trial_state\", version = 2)",
                 "public final class TrialState {",
                 "  @PiField(id = \"players\", sync = PiSyncScope.TRACKING, persist = true)",
                 "  public final List<String> players = new ArrayList<>();",
@@ -42,7 +42,11 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.TrialState_PiFields", "public static final PiFieldKey ENERGY = new PiFieldKey(1, \"energy\");");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final int VERSION = 2;");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final int FIELD_COUNT = 2;");
-        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final String SCHEMA_ID = \"example.TrialState\";");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final String SCHEMA_ID = \"example:trial_state\";");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public ResourceLocation schemaId()");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return ResourceLocation.fromNamespaceAndPath(\"example\", \"trial_state\");");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public int version()");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return VERSION;");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final PiStateBinding<TrialState> BINDING = new PiStateBinding<>() {");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public Class<TrialState> stateType()");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return TrialState.class;");
@@ -78,7 +82,7 @@ class PiSyncModelProcessorTest {
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
-                "@PiSyncModel(version = 3)",
+                "@PiSyncModel(id = \"example:advanced_state\", version = 3)",
                 "public final class AdvancedState {",
                 "  @PiField(id = \"active\", sync = PiSyncScope.CHUNK, persist = true)",
                 "  public boolean active = true;",
@@ -119,7 +123,7 @@ class PiSyncModelProcessorTest {
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
-                "@PiSyncModel(version = 1)",
+                "@PiSyncModel(id = \"example:invalid_state\", version = 1)",
                 "public final class InvalidState {",
                 "  @PiField(id = \"count\", sync = PiSyncScope.CHUNK, persist = true)",
                 "  public int count;",

@@ -2,6 +2,7 @@ package org.pickaid.piserializekit.runtime.schema;
 
 import java.util.List;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.schema.PiDirtySet;
 import org.pickaid.piserializekit.api.schema.PiFieldDescriptor;
@@ -14,12 +15,25 @@ import org.pickaid.piserializekit.api.schema.PiSyncScope;
 public final class TestSchemaProvider implements PiSchemaProvider {
     public static final PiFieldKey VALUE = new PiFieldKey(0, "value");
     public static final PiFieldDescriptor VALUE_FIELD = new PiFieldDescriptor(VALUE, PiSyncScope.CHUNK, true);
+    public static final ResourceLocation SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "schema_provider_state");
+    public static final String SCHEMA_ID_STRING = SCHEMA_ID.toString();
+    public static final int SCHEMA_VERSION = 1;
 
     public static final class TestState {
         public int value;
     }
 
     private static final PiStateBinding<TestState> BINDING = new PiStateBinding<>() {
+        @Override
+        public ResourceLocation schemaId() {
+            return SCHEMA_ID;
+        }
+
+        @Override
+        public int version() {
+            return SCHEMA_VERSION;
+        }
+
         @Override
         public Class<TestState> stateType() {
             return TestState.class;
@@ -37,12 +51,12 @@ public final class TestSchemaProvider implements PiSchemaProvider {
 
         @Override
         public CompoundTag saveFull(TestState self) {
-            return PiSchemaSupport.tagWithHeader("test.TestState", 1, PiSchemaSupport.putInt("value", self.value));
+            return PiSchemaSupport.tagWithHeader(SCHEMA_ID_STRING, SCHEMA_VERSION, PiSchemaSupport.putInt("value", self.value));
         }
 
         @Override
         public void loadFull(TestState self, CompoundTag tag, PiDecodeContext context) {
-            if (!PiSchemaSupport.validateHeader(tag, context, "test.TestState", 1)) {
+            if (!PiSchemaSupport.validateHeader(tag, context, SCHEMA_ID_STRING, SCHEMA_VERSION)) {
                 return;
             }
             self.value = PiSchemaSupport.getInt(tag, "value", context, self.value);
@@ -55,7 +69,7 @@ public final class TestSchemaProvider implements PiSchemaProvider {
 
         @Override
         public CompoundTag writeDelta(TestState self, PiDirtySet dirtySet) {
-            CompoundTag tag = PiSchemaSupport.headerTag("test.TestState", 1);
+            CompoundTag tag = PiSchemaSupport.headerTag(SCHEMA_ID_STRING, SCHEMA_VERSION);
             if (dirtySet.contains(VALUE)) {
                 tag.put("value", PiSchemaSupport.putInt("value", self.value).getSecond());
             }
@@ -64,7 +78,7 @@ public final class TestSchemaProvider implements PiSchemaProvider {
 
         @Override
         public void applyDelta(TestState self, CompoundTag tag, PiDecodeContext context) {
-            if (!PiSchemaSupport.validateHeader(tag, context, "test.TestState", 1)) {
+            if (!PiSchemaSupport.validateHeader(tag, context, SCHEMA_ID_STRING, SCHEMA_VERSION)) {
                 return;
             }
             if (tag.contains("value")) {

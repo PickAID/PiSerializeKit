@@ -6,9 +6,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.SOURCE)
-@Target(ElementType.TYPE)
-public @interface PiSyncModel {
-    String id();
-
-    int version() default 1;
+@Target(ElementType.METHOD)
+public @interface PiAfterDecode {
 }

@@ -13,4 +13,6 @@ public @interface PiField {
     PiSyncScope sync();
 
     boolean persist();
+
+    Class<? extends PiFieldCodecProvider<?>> serializer() default PiInferredFieldCodec.class;
 }
