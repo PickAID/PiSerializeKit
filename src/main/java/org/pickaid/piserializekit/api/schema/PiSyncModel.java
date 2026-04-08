@@ -5,10 +5,19 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * Marks a state class for generated schema, persistence, and packet bindings.
+ */
 @Retention(RetentionPolicy.SOURCE)
 @Target(ElementType.TYPE)
 public @interface PiSyncModel {
+    /**
+     * Returns the explicit schema id as a valid {@code namespace:path} resource location.
+     */
     String id();
 
+    /**
+     * Returns the schema version used in serialized headers.
+     */
     int version() default 1;
 }

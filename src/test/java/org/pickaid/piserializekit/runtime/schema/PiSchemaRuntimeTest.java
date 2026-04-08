@@ -5,21 +5,39 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.schema.PiDirtySet;
+import org.pickaid.piserializekit.api.schema.PiFieldDescriptor;
 import org.pickaid.piserializekit.api.schema.PiFieldKey;
+import org.pickaid.piserializekit.api.schema.PiStateBinding;
 import org.pickaid.piserializekit.api.schema.PiSyncSchema;
+import org.pickaid.piserializekit.api.schema.PiSyncScope;
+import org.pickaid.piserializekit.api.service.PiSerializer;
+import org.pickaid.piserializekit.api.service.PiSerializers;
+import org.pickaid.piserializekit.runtime.service.PiBuiltInSerializers;
+import org.pickaid.piserializekit.runtime.service.PiSerializeRuntime;
 
 class PiSchemaRuntimeTest {
     private static final PiFieldKey PLAYERS = new PiFieldKey(0, "players");
     private static final PiFieldKey COST = new PiFieldKey(1, "cost");
-    private static final String SCHEMA_ID = "test.TrialState";
+    private static final ResourceLocation SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "trial_state");
     private static final int VERSION = 3;
+    private static final PiSerializeRuntime RUNTIME = createRuntime();
+    private static final PiSchemaField<List<String>> PLAYERS_FIELD = new PiSchemaField<>(
+            new PiFieldDescriptor(PLAYERS, PiSyncScope.TRACKING, true),
+            PiSerializers.listOf(serializer(PiSerializers.STRING))
+    );
+    private static final PiSchemaField<Long> COST_FIELD = new PiSchemaField<>(
+            new PiFieldDescriptor(COST, PiSyncScope.OWNER, true),
+            serializer(PiSerializers.LONG)
+    );
 
     private static final class TestState {
         private final List<String> players = new ArrayList<>();
@@ -32,8 +50,8 @@ class PiSchemaRuntimeTest {
             return PiSchemaSupport.tagWithHeader(
                     SCHEMA_ID,
                     VERSION,
-                    PiSchemaSupport.putStringList("players", self.players),
-                    PiSchemaSupport.putLong("cost", self.cost)
+                    PiSchemaFieldCodecs.writeField(PLAYERS_FIELD, self.players),
+                    PiSchemaFieldCodecs.writeField(COST_FIELD, self.cost)
             );
         }
 
@@ -43,8 +61,8 @@ class PiSchemaRuntimeTest {
                 return;
             }
             self.players.clear();
-            self.players.addAll(PiSchemaSupport.getStringList(tag, "players", context));
-            self.cost = PiSchemaSupport.getLong(tag, "cost", context, 0L);
+            self.players.addAll(PiSchemaFieldCodecs.readField(tag, PLAYERS_FIELD, context, List.of()));
+            self.cost = PiSchemaFieldCodecs.readField(tag, COST_FIELD, context, 0L);
         }
 
         @Override
@@ -52,7 +70,7 @@ class PiSchemaRuntimeTest {
             return PiSchemaSupport.tagWithHeader(
                     SCHEMA_ID,
                     VERSION,
-                    PiSchemaSupport.putStringList("players", self.players)
+                    PiSchemaFieldCodecs.writeField(PLAYERS_FIELD, self.players)
             );
         }
 
@@ -60,10 +78,10 @@ class PiSchemaRuntimeTest {
         public CompoundTag writeDelta(TestState self, PiDirtySet dirtySet) {
             CompoundTag tag = PiSchemaSupport.headerTag(SCHEMA_ID, VERSION);
             if (dirtySet.contains(PLAYERS)) {
-                tag.put("players", PiSchemaSupport.putStringList("players", self.players).getSecond());
+                tag.put(PLAYERS_FIELD.key(), PiSchemaFieldCodecs.writeField(PLAYERS_FIELD, self.players).getSecond());
             }
             if (dirtySet.contains(COST)) {
-                tag.put("cost", PiSchemaSupport.putLong("cost", self.cost).getSecond());
+                tag.put(COST_FIELD.key(), PiSchemaFieldCodecs.writeField(COST_FIELD, self.cost).getSecond());
             }
             return tag;
         }
@@ -73,14 +91,24 @@ class PiSchemaRuntimeTest {
             if (!PiSchemaSupport.validateHeader(tag, context, SCHEMA_ID, VERSION)) {
                 return;
             }
-            if (tag.contains("players")) {
+            if (tag.contains(PLAYERS_FIELD.key())) {
                 self.players.clear();
-                self.players.addAll(PiSchemaSupport.getStringList(tag, "players", context));
+                self.players.addAll(PiSchemaFieldCodecs.readField(tag, PLAYERS_FIELD, context, List.of()));
             }
-            if (tag.contains("cost")) {
-                self.cost = PiSchemaSupport.getLong(tag, "cost", context, self.cost);
+            if (tag.contains(COST_FIELD.key())) {
+                self.cost = PiSchemaFieldCodecs.readField(tag, COST_FIELD, context, self.cost);
             }
         }
+    }
+
+    private static PiSerializeRuntime createRuntime() {
+        PiSerializeRuntime runtime = new PiSerializeRuntime();
+        PiBuiltInSerializers.install(runtime);
+        return runtime;
+    }
+
+    private static <T> PiSerializer<T> serializer(org.pickaid.piserializekit.api.service.PiSerializerType<T> type) {
+        return RUNTIME.lookup(type).orElseThrow();
     }
 
     @Test
@@ -107,9 +135,9 @@ class PiSchemaRuntimeTest {
 
         CompoundTag client = schema.saveClientView(state);
 
-        assertTrue(client.contains("players"));
-        assertFalse(client.contains("cost"));
-        assertEquals(SCHEMA_ID, client.getString("__pi_schema"));
+        assertTrue(client.contains(PLAYERS_FIELD.key()));
+        assertFalse(client.contains(COST_FIELD.key()));
+        assertEquals(SCHEMA_ID.toString(), client.getString("__pi_schema"));
         assertEquals(VERSION, client.getInt("__pi_version"));
     }
 
@@ -125,7 +153,7 @@ class PiSchemaRuntimeTest {
         restored.cost = 1L;
 
         CompoundTag playersDelta = schema.writeDelta(state, new PiDirtySet().mark(PLAYERS));
-        assertEquals(SCHEMA_ID, playersDelta.getString("__pi_schema"));
+        assertEquals(SCHEMA_ID.toString(), playersDelta.getString("__pi_schema"));
         assertEquals(VERSION, playersDelta.getInt("__pi_version"));
 
         schema.applyDelta(restored, playersDelta, PiDecodeContext.strict());
@@ -150,10 +178,10 @@ class PiSchemaRuntimeTest {
         assertEquals(0L, restored.cost);
         assertEquals(2, context.result().issues().size());
         assertEquals("players", context.result().issues().get(0).path());
-        assertEquals("missing list", context.result().issues().get(0).message());
+        assertEquals("missing field payload", context.result().issues().get(0).message());
         assertFalse(context.result().issues().get(0).fatal());
         assertEquals("cost", context.result().issues().get(1).path());
-        assertEquals("missing long", context.result().issues().get(1).message());
+        assertEquals("missing field payload", context.result().issues().get(1).message());
         assertFalse(context.result().issues().get(1).fatal());
         assertFalse(context.result().hasFatal());
     }
@@ -166,7 +194,7 @@ class PiSchemaRuntimeTest {
         restored.cost = 9L;
 
         CompoundTag tag = schema.saveFull(new TestState());
-        tag.putString("__pi_schema", "other.State");
+        tag.putString("__pi_schema", "other:state");
 
         PiDecodeContext context = PiDecodeContext.strict();
         schema.loadFull(restored, tag, context);
@@ -221,5 +249,81 @@ class PiSchemaRuntimeTest {
         assertEquals("trial", context.result().issues().get(3).path());
         assertEquals("invalid resource location", context.result().issues().get(3).message());
         assertFalse(context.result().hasFatal());
+    }
+
+    @Test
+    void generatedSchemaRoundTripsNestedCollectionsAndCustomFieldThroughFullAndDelta() {
+        GeneratedComplexState state = new GeneratedComplexState();
+        state.names.add("alice");
+        state.counts.put("iron", 3);
+        state.child.value = 9;
+        state.label = "  boss  ";
+        PiStateBinding<GeneratedComplexState> binding = PiSchemas.require(GeneratedComplexState.class);
+
+        GeneratedComplexState fullRestored = staleGeneratedComplexState();
+        PiDecodeContext fullContext = PiDecodeContext.strict();
+
+        binding.loadFull(fullRestored, binding.saveFull(state), fullContext);
+
+        assertEquals(List.of("alice"), fullRestored.names);
+        assertEquals(Map.of("iron", 3), fullRestored.counts);
+        assertEquals(9, fullRestored.child.value);
+        assertEquals("boss", fullRestored.label);
+        assertTrue(fullContext.result().issues().isEmpty());
+
+        GeneratedComplexState deltaRestored = staleGeneratedComplexState();
+        PiDecodeContext deltaContext = PiDecodeContext.strict();
+        PiDirtySet dirtySet = new PiDirtySet()
+                .mark(fieldKey(binding, "names"))
+                .mark(fieldKey(binding, "counts"))
+                .mark(fieldKey(binding, "child"))
+                .mark(fieldKey(binding, "label"));
+
+        binding.applyDelta(
+                deltaRestored,
+                binding.writeDelta(state, dirtySet),
+                deltaContext
+        );
+
+        assertEquals(List.of("alice"), deltaRestored.names);
+        assertEquals(Map.of("iron", 3), deltaRestored.counts);
+        assertEquals(9, deltaRestored.child.value);
+        assertEquals("boss", deltaRestored.label);
+        assertTrue(deltaContext.result().issues().isEmpty());
+    }
+
+    @Test
+    void generatedSchemaKeepsExistingFinalCollectionValuesWhenDeltaDecodeFails() {
+        GeneratedComplexState restored = staleGeneratedComplexState();
+        PiStateBinding<GeneratedComplexState> binding = PiSchemas.require(GeneratedComplexState.class);
+        CompoundTag delta = PiSchemaSupport.headerTag(binding.schemaId(), binding.version());
+        delta.putString("names", "broken");
+        delta.putString("counts", "broken");
+        PiDecodeContext context = PiDecodeContext.strict();
+
+        binding.applyDelta(restored, delta, context);
+
+        assertEquals(List.of("stale"), restored.names);
+        assertEquals(Map.of("old", 1), restored.counts);
+        assertEquals(2, context.result().issues().size());
+        assertEquals("names", context.result().issues().get(0).path());
+        assertEquals("counts", context.result().issues().get(1).path());
+    }
+
+    private static GeneratedComplexState staleGeneratedComplexState() {
+        GeneratedComplexState state = new GeneratedComplexState();
+        state.names.add("stale");
+        state.counts.put("old", 1);
+        state.child.value = 1;
+        state.label = "stale";
+        return state;
+    }
+
+    private static PiFieldKey fieldKey(PiStateBinding<?> binding, String id) {
+        return binding.fields().stream()
+                .map(PiFieldDescriptor::key)
+                .filter(key -> key.id().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing field key for " + id));
     }
 }

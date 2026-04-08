@@ -21,12 +21,19 @@ import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
 import javax.tools.Diagnostic;
 import javax.tools.StandardLocation;
+import org.pickaid.piserializekit.api.schema.PiAfterDecode;
 import org.pickaid.piserializekit.api.schema.PiField;
+import org.pickaid.piserializekit.api.schema.PiFieldCodecProvider;
+import org.pickaid.piserializekit.api.schema.PiInferredFieldCodec;
 import org.pickaid.piserializekit.api.schema.PiSyncModel;
 
 @SupportedAnnotationTypes({
@@ -41,6 +48,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private static final String GENERATED_LIVING_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.runtime.service.PiGeneratedLivingServiceDescriptor";
     private static final String LIVING_SERVICE_PROVIDER = "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider";
     private static final String LIVING_SERVICE_REGISTRY = "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry";
+    private static final String FIELD_ANNOTATION = PiField.class.getName();
+    private static final String INFERRED_FIELD_CODEC = PiInferredFieldCodec.class.getName();
 
     private final Set<String> providerTypes = new LinkedHashSet<>();
     private final Set<String> livingProviderTypes = new LinkedHashSet<>();
@@ -66,9 +75,16 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 if (schemaIdentity == null) {
                     continue;
                 }
+                AfterDecodeSpec afterDecode = resolveAfterDecodeHook(typeElement);
+                if (afterDecode == null) {
+                    continue;
+                }
                 List<FieldSpec> fields = collectFields(typeElement);
+                if (fields == null) {
+                    continue;
+                }
                 generateFieldsType(typeElement, fields);
-                generateSchemaType(typeElement, fields, schemaIdentity);
+                generateSchemaType(typeElement, fields, schemaIdentity, afterDecode);
                 generateSchemaProviderType(typeElement);
             }
         }
@@ -126,6 +142,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private List<FieldSpec> collectFields(TypeElement typeElement) {
         List<FieldSpec> fields = new ArrayList<>();
         int index = 0;
+        boolean valid = true;
         for (Element enclosedElement : typeElement.getEnclosedElements()) {
             if (enclosedElement.getKind() != ElementKind.FIELD || enclosedElement.getModifiers().contains(Modifier.STATIC)) {
                 continue;
@@ -134,17 +151,351 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             if (piField == null) {
                 continue;
             }
-            fields.add(new FieldSpec(
-                    index++,
-                    constantName(enclosedElement.getSimpleName().toString()),
-                    enclosedElement.getSimpleName().toString(),
-                    piField.id(),
-                    enclosedElement.asType().toString(),
-                    piField.sync().name(),
-                    piField.persist()
-            ));
+            FieldSpec field = resolveFieldSpec((VariableElement) enclosedElement, piField, index);
+            if (field == null) {
+                valid = false;
+                continue;
+            }
+            fields.add(field);
+            index++;
         }
-        return fields;
+        return valid ? fields : null;
+    }
+
+    private FieldSpec resolveFieldSpec(VariableElement fieldElement, PiField annotation, int index) {
+        ResolvedSerializer serializer = resolveSerializer(fieldElement, annotation);
+        if (serializer == null) {
+            return null;
+        }
+        FieldAccessStrategy accessStrategy = resolveAccessStrategy(fieldElement, serializer.rawKind());
+        if (accessStrategy == null) {
+            return null;
+        }
+        return new FieldSpec(
+                index,
+                constantName(fieldElement.getSimpleName().toString()),
+                constantName(fieldElement.getSimpleName().toString()) + "_FIELD",
+                fieldElement.getSimpleName().toString(),
+                annotation.id(),
+                serializer.valueType(),
+                annotation.sync().name(),
+                annotation.persist(),
+                serializer.serializerExpression(),
+                accessStrategy
+        );
+    }
+
+    private ResolvedSerializer resolveSerializer(VariableElement fieldElement, PiField annotation) {
+        TypeMirror serializerType = serializerType(fieldElement);
+        if (serializerType != null && !INFERRED_FIELD_CODEC.equals(serializerType.toString())) {
+            return resolveCustomSerializer(fieldElement, serializerType);
+        }
+        return resolveInferredSerializer(fieldElement.asType(), fieldElement);
+    }
+
+    private ResolvedSerializer resolveCustomSerializer(VariableElement fieldElement, TypeMirror serializerType) {
+        Element serializerElement = processingEnv.getTypeUtils().asElement(serializerType);
+        if (!(serializerElement instanceof TypeElement serializerTypeElement)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiField.serializer must reference a concrete codec provider class",
+                    fieldElement
+            );
+            return null;
+        }
+        if (serializerTypeElement.getModifiers().contains(Modifier.PRIVATE)
+                || serializerTypeElement.getNestingKind().isNested() && !serializerTypeElement.getModifiers().contains(Modifier.STATIC)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiField.serializer must be an accessible top-level or static nested class",
+                    fieldElement
+            );
+            return null;
+        }
+        if (!hasAccessibleNoArgConstructor(serializerTypeElement)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiField.serializer must declare an accessible no-arg constructor",
+                fieldElement
+            );
+            return null;
+        }
+        TypeMirror providerValueType = resolveProviderValueType(serializerTypeElement.asType());
+        if (providerValueType == null) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiField.serializer must bind PiFieldCodecProvider<T> through a concrete generic type",
+                    fieldElement
+            );
+            return null;
+        }
+        if (!isConcreteProviderType(providerValueType)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiField.serializer must bind PiFieldCodecProvider<T> through a concrete generic type",
+                    fieldElement
+            );
+            return null;
+        }
+        TypeMirror expectedType = comparableType(fieldElement.asType());
+        TypeMirror actualType = comparableType(providerValueType);
+        if (!processingEnv.getTypeUtils().isSameType(expectedType, actualType)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiField.serializer value type " + actualType + " does not match field type " + expectedType,
+                    fieldElement
+            );
+            return null;
+        }
+        return new ResolvedSerializer(
+                boxedTypeName(expectedType),
+                "new " + serializerType + "().serializer()",
+                rawKind(fieldElement.asType())
+        );
+    }
+
+    private TypeMirror resolveProviderValueType(TypeMirror providerType) {
+        if (!(providerType instanceof DeclaredType declaredType)) {
+            return null;
+        }
+        if (sameErasure(providerType, PiFieldCodecProvider.class.getName())) {
+            return declaredType.getTypeArguments().size() == 1 ? declaredType.getTypeArguments().get(0) : null;
+        }
+        for (TypeMirror superType : processingEnv.getTypeUtils().directSupertypes(providerType)) {
+            TypeMirror resolved = resolveProviderValueType(superType);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+        return null;
+    }
+
+    private boolean isConcreteProviderType(TypeMirror type) {
+        return switch (type.getKind()) {
+            case BOOLEAN, BYTE, SHORT, INT, LONG, CHAR, FLOAT, DOUBLE -> true;
+            case ARRAY -> isConcreteProviderType(((ArrayType) type).getComponentType());
+            case DECLARED -> {
+                DeclaredType declaredType = (DeclaredType) type;
+                boolean concrete = true;
+                for (TypeMirror typeArgument : declaredType.getTypeArguments()) {
+                    if (!isConcreteProviderType(typeArgument)) {
+                        concrete = false;
+                        break;
+                    }
+                }
+                yield concrete;
+            }
+            default -> false;
+        };
+    }
+
+    private TypeMirror comparableType(TypeMirror type) {
+        if (type.getKind().isPrimitive()) {
+            return processingEnv.getTypeUtils().boxedClass((javax.lang.model.type.PrimitiveType) type).asType();
+        }
+        return type;
+    }
+
+    private ResolvedSerializer resolveInferredSerializer(TypeMirror type, Element fieldElement) {
+        if (type.getKind() == TypeKind.BYTE || sameType(type, "java.lang.Byte")) {
+            return scalarSerializer("java.lang.Byte", "requireSerializer(PiSerializers.BYTE)");
+        }
+        if (type.getKind() == TypeKind.SHORT || sameType(type, "java.lang.Short")) {
+            return scalarSerializer("java.lang.Short", "requireSerializer(PiSerializers.SHORT)");
+        }
+        if (type.getKind() == TypeKind.INT || sameType(type, "java.lang.Integer")) {
+            return scalarSerializer("java.lang.Integer", "requireSerializer(PiSerializers.INT)");
+        }
+        if (type.getKind() == TypeKind.LONG || sameType(type, "java.lang.Long")) {
+            return scalarSerializer("java.lang.Long", "requireSerializer(PiSerializers.LONG)");
+        }
+        if (type.getKind() == TypeKind.BOOLEAN || sameType(type, "java.lang.Boolean")) {
+            return scalarSerializer("java.lang.Boolean", "requireSerializer(PiSerializers.BOOLEAN)");
+        }
+        if (type.getKind() == TypeKind.FLOAT || sameType(type, "java.lang.Float")) {
+            return scalarSerializer("java.lang.Float", "requireSerializer(PiSerializers.FLOAT)");
+        }
+        if (type.getKind() == TypeKind.DOUBLE || sameType(type, "java.lang.Double")) {
+            return scalarSerializer("java.lang.Double", "requireSerializer(PiSerializers.DOUBLE)");
+        }
+        if (sameType(type, "java.lang.String")) {
+            return scalarSerializer("java.lang.String", "requireSerializer(PiSerializers.STRING)");
+        }
+        if (sameType(type, "java.util.UUID")) {
+            return scalarSerializer("java.util.UUID", "requireSerializer(PiSerializers.UUID)");
+        }
+        if (sameType(type, "net.minecraft.resources.ResourceLocation")) {
+            return scalarSerializer("net.minecraft.resources.ResourceLocation", "requireSerializer(PiSerializers.RESOURCE_LOCATION)");
+        }
+        if (sameType(type, "net.minecraft.nbt.CompoundTag")) {
+            return scalarSerializer("net.minecraft.nbt.CompoundTag", "requireSerializer(PiSerializers.COMPOUND_TAG)");
+        }
+        if (sameType(type, "net.minecraft.core.BlockPos")) {
+            return scalarSerializer("net.minecraft.core.BlockPos", "requireSerializer(PiSerializers.BLOCK_POS)");
+        }
+        if (sameType(type, "net.minecraft.world.phys.Vec3")) {
+            return scalarSerializer("net.minecraft.world.phys.Vec3", "requireSerializer(PiSerializers.VEC3)");
+        }
+        if (sameType(type, "net.minecraft.world.item.ItemStack")) {
+            return scalarSerializer("net.minecraft.world.item.ItemStack", "requireSerializer(PiSerializers.ITEM_STACK)");
+        }
+        if (isNestedSyncModelType(type)) {
+            return scalarSerializer(type.toString(), "PiSchemaSerializers.forState(" + type + ".class)");
+        }
+        if (isEnumType(type)) {
+            return scalarSerializer(type.toString(), "PiSerializers.enumType(" + type + ".class)");
+        }
+        if (type.getKind() == TypeKind.ARRAY) {
+            ArrayType arrayType = (ArrayType) type;
+            ResolvedSerializer element = resolveInferredSerializer(arrayType.getComponentType(), fieldElement);
+            if (element == null) {
+                return null;
+            }
+            return scalarSerializer(type.toString(), "PiSerializers.arrayOf(" + type + ".class, " + element.serializerExpression() + ")");
+        }
+        if (sameErasure(type, "java.util.Optional")) {
+            TypeMirror elementType = typeArgument(type, fieldElement, 0, "Optional");
+            if (elementType == null) {
+                return null;
+            }
+            ResolvedSerializer element = resolveInferredSerializer(elementType, fieldElement);
+            if (element == null) {
+                return null;
+            }
+            return new ResolvedSerializer(
+                    "java.util.Optional<" + element.valueType() + ">",
+                    "PiSerializers.optionalOf(" + element.serializerExpression() + ")",
+                    RawKind.SCALAR
+            );
+        }
+        if (sameErasure(type, "java.util.List")) {
+            TypeMirror elementType = typeArgument(type, fieldElement, 0, "List");
+            if (elementType == null) {
+                return null;
+            }
+            ResolvedSerializer element = resolveInferredSerializer(elementType, fieldElement);
+            if (element == null) {
+                return null;
+            }
+            return new ResolvedSerializer(
+                    "java.util.List<" + element.valueType() + ">",
+                    "PiSerializers.listOf(" + element.serializerExpression() + ")",
+                    RawKind.LIST
+            );
+        }
+        if (sameErasure(type, "java.util.Set")) {
+            TypeMirror elementType = typeArgument(type, fieldElement, 0, "Set");
+            if (elementType == null) {
+                return null;
+            }
+            ResolvedSerializer element = resolveInferredSerializer(elementType, fieldElement);
+            if (element == null) {
+                return null;
+            }
+            return new ResolvedSerializer(
+                    "java.util.Set<" + element.valueType() + ">",
+                    "PiSerializers.setOf(" + element.serializerExpression() + ")",
+                    RawKind.SET
+            );
+        }
+        if (sameErasure(type, "java.util.Map")) {
+            TypeMirror keyType = typeArgument(type, fieldElement, 0, "Map");
+            TypeMirror valueType = typeArgument(type, fieldElement, 1, "Map");
+            if (keyType == null || valueType == null) {
+                return null;
+            }
+            ResolvedSerializer key = resolveInferredSerializer(keyType, fieldElement);
+            ResolvedSerializer value = resolveInferredSerializer(valueType, fieldElement);
+            if (key == null || value == null) {
+                return null;
+            }
+            return new ResolvedSerializer(
+                    "java.util.Map<" + key.valueType() + ", " + value.valueType() + ">",
+                    "PiSerializers.mapOf(" + key.serializerExpression() + ", " + value.serializerExpression() + ")",
+                    RawKind.MAP
+            );
+        }
+        processingEnv.getMessager().printMessage(
+                Diagnostic.Kind.ERROR,
+                "Unsupported @PiField type " + type + ". Add a local serializer override.",
+                fieldElement
+        );
+        return null;
+    }
+
+    private ResolvedSerializer scalarSerializer(String valueType, String serializerExpression) {
+        return new ResolvedSerializer(valueType, serializerExpression, RawKind.SCALAR);
+    }
+
+    private FieldAccessStrategy resolveAccessStrategy(VariableElement fieldElement, RawKind rawKind) {
+        boolean isFinal = fieldElement.getModifiers().contains(Modifier.FINAL);
+        if (!isFinal) {
+            return FieldAccessStrategy.ASSIGN;
+        }
+        return switch (rawKind) {
+            case LIST -> FieldAccessStrategy.MUTATE_LIST;
+            case SET -> FieldAccessStrategy.MUTATE_SET;
+            case MAP -> FieldAccessStrategy.MUTATE_MAP;
+            case SCALAR -> {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Final @PiField values must use mutable List/Set/Map types or drop final",
+                        fieldElement
+                );
+                yield null;
+            }
+        };
+    }
+
+    private boolean sameType(TypeMirror type, String qualifiedName) {
+        return qualifiedName.equals(type.toString());
+    }
+
+    private boolean sameErasure(TypeMirror type, String qualifiedName) {
+        return qualifiedName.equals(processingEnv.getTypeUtils().erasure(type).toString());
+    }
+
+    private boolean isEnumType(TypeMirror type) {
+        Element element = processingEnv.getTypeUtils().asElement(type);
+        return element != null && element.getKind() == ElementKind.ENUM;
+    }
+
+    private boolean isNestedSyncModelType(TypeMirror type) {
+        Element element = processingEnv.getTypeUtils().asElement(type);
+        return element instanceof TypeElement typeElement && typeElement.getAnnotation(PiSyncModel.class) != null;
+    }
+
+    private TypeMirror typeArgument(TypeMirror type, Element fieldElement, int index, String label) {
+        if (!(type instanceof DeclaredType declaredType) || declaredType.getTypeArguments().size() <= index) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    label + " @PiField types must declare concrete generic arguments",
+                    fieldElement
+            );
+            return null;
+        }
+        return declaredType.getTypeArguments().get(index);
+    }
+
+    private String boxedTypeName(TypeMirror type) {
+        if (type.getKind().isPrimitive()) {
+            TypeElement boxed = processingEnv.getTypeUtils().boxedClass((javax.lang.model.type.PrimitiveType) type);
+            return boxed.getQualifiedName().toString();
+        }
+        return type.toString();
+    }
+
+    private RawKind rawKind(TypeMirror type) {
+        if (sameErasure(type, "java.util.List")) {
+            return RawKind.LIST;
+        }
+        if (sameErasure(type, "java.util.Set")) {
+            return RawKind.SET;
+        }
+        if (sameErasure(type, "java.util.Map")) {
+            return RawKind.MAP;
+        }
+        return RawKind.SCALAR;
     }
 
     private void generateFieldsType(TypeElement typeElement, List<FieldSpec> fields) {
@@ -175,7 +526,12 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         }
     }
 
-    private void generateSchemaType(TypeElement typeElement, List<FieldSpec> fields, SchemaIdentity schemaIdentity) {
+    private void generateSchemaType(
+            TypeElement typeElement,
+            List<FieldSpec> fields,
+            SchemaIdentity schemaIdentity,
+            AfterDecodeSpec afterDecode
+    ) {
         PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
         String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
         String simpleName = typeElement.getSimpleName() + "_PiSchema";
@@ -197,6 +553,13 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("import org.pickaid.piserializekit.api.schema.PiFieldDescriptor;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiStateBinding;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiSyncScope;\n\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializeServices;\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializer;\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializerType;\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializers;\n");
+                writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaField;\n");
+                writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaFieldCodecs;\n");
+                writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaSerializers;\n");
                 writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;\n\n");
                 writer.write("public final class " + simpleName + " {\n");
                 writer.write("    public static final String SCHEMA_ID = \"" + schemaId + "\";\n");
@@ -208,9 +571,15 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                         writer.write("    public static final PiFieldDescriptor " + field.constantName() + " = new PiFieldDescriptor(" +
                                 typeElement.getSimpleName() + "_PiFields." + field.constantName() + ", PiSyncScope." + field.syncScope() + ", " + field.persist() + ");\n");
                     }
-                    writer.write("    public static final List<PiFieldDescriptor> FIELDS = List.of(" + joinConstantNames(fields) + ");\n\n");
+                    writer.write("    public static final List<PiFieldDescriptor> FIELDS = List.of(" + joinConstantNames(fields) + ");\n");
+                    for (FieldSpec field : fields) {
+                        writer.write("    public static final PiSchemaField<" + field.valueType() + "> " + field.schemaConstantName() + " = new PiSchemaField<>(" +
+                                field.constantName() + ", " + field.serializerExpression() + ");\n");
+                    }
+                    writer.write("    public static final List<PiSchemaField<?>> SCHEMA_FIELDS = List.of(" + joinSchemaConstantNames(fields) + ");\n\n");
                 } else {
-                    writer.write("    public static final List<PiFieldDescriptor> FIELDS = List.of();\n\n");
+                    writer.write("    public static final List<PiFieldDescriptor> FIELDS = List.of();\n");
+                    writer.write("    public static final List<PiSchemaField<?>> SCHEMA_FIELDS = List.of();\n\n");
                 }
                 writeBindingConstant(writer, typeElement, schemaIdentity);
                 writer.write("    public static CompoundTag saveFull(" + typeElement.getSimpleName() + " self) {\n");
@@ -227,6 +596,9 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 for (FieldSpec field : fields) {
                     writer.write(loadStmt(field));
                 }
+                if (afterDecode.present()) {
+                    writer.write("        self." + afterDecode.methodName() + "();\n");
+                }
                 writer.write("    }\n\n");
                 writer.write("    public static CompoundTag writeDelta(" + typeElement.getSimpleName() + " self, PiDirtySet dirtySet) {\n");
                 writer.write("        CompoundTag tag = PiSchemaSupport.headerTag(SCHEMA_ID, VERSION);\n");
@@ -242,10 +614,17 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("            return;\n");
                 writer.write("        }\n");
                 for (FieldSpec field : fields) {
-                    writer.write("        if (tag.contains(\"" + field.id() + "\")) {\n");
+                    writer.write("        if (tag.contains(" + field.schemaConstantName() + ".key())) {\n");
                     writer.write(applyDeltaStmt(field));
                     writer.write("        }\n");
                 }
+                if (afterDecode.present()) {
+                    writer.write("        self." + afterDecode.methodName() + "();\n");
+                }
+                writer.write("    }\n\n");
+                writer.write("    private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type) {\n");
+                writer.write("        return PiSerializeServices.require().lookup(type)\n");
+                writer.write("                .orElseThrow(() -> new IllegalStateException(\"Missing Pi serializer for \" + type.id() + \" / \" + type.javaType().getName()));\n");
                 writer.write("    }\n\n");
                 writer.write("    private " + simpleName + "() {\n");
                 writer.write("    }\n");
@@ -484,7 +863,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         }
         String id = annotation.id();
         int delimiter = id.indexOf(':');
-        if (delimiter <= 0 || delimiter == id.length() - 1) {
+        if (delimiter <= 0 || delimiter != id.lastIndexOf(':') || delimiter == id.length() - 1) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
                     "@PiSyncModel.id must be a namespace:path resource location",
@@ -492,7 +871,80 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             );
             return null;
         }
-        return new SchemaIdentity(id, id.substring(0, delimiter), id.substring(delimiter + 1));
+        String namespace = id.substring(0, delimiter);
+        String path = id.substring(delimiter + 1);
+        if (!isValidNamespace(namespace) || !isValidPath(path)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiSyncModel.id must be a namespace:path resource location",
+                    typeElement
+            );
+            return null;
+        }
+        return new SchemaIdentity(id, namespace, path);
+    }
+
+    private AfterDecodeSpec resolveAfterDecodeHook(TypeElement typeElement) {
+        AfterDecodeSpec hook = AfterDecodeSpec.none();
+        for (Element enclosedElement : typeElement.getEnclosedElements()) {
+            if (enclosedElement.getKind() != ElementKind.METHOD || enclosedElement.getAnnotation(PiAfterDecode.class) == null) {
+                continue;
+            }
+            ExecutableElement method = (ExecutableElement) enclosedElement;
+            if (hook.present()) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiAfterDecode allows only one method per @PiSyncModel type",
+                        method
+                );
+                return null;
+            }
+            if (method.getModifiers().contains(Modifier.PRIVATE)
+                    || method.getModifiers().contains(Modifier.STATIC)
+                    || !method.getParameters().isEmpty()
+                    || method.getReturnType().getKind() != javax.lang.model.type.TypeKind.VOID) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiAfterDecode methods must be non-static, non-private, no-arg, and return void",
+                        method
+                );
+                return null;
+            }
+            hook = new AfterDecodeSpec(method.getSimpleName().toString());
+        }
+        return hook;
+    }
+
+    private TypeMirror serializerType(Element fieldElement) {
+        AnnotationMirror mirror = findAnnotation(fieldElement, FIELD_ANNOTATION);
+        if (mirror == null) {
+            return null;
+        }
+        return typeValue(annotationValues(mirror), "serializer");
+    }
+
+    private boolean isValidNamespace(String namespace) {
+        for (int i = 0; i < namespace.length(); i++) {
+            char current = namespace.charAt(i);
+            if (!isLowercaseResourceChar(current) && current != '.' && current != '-') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isValidPath(String path) {
+        for (int i = 0; i < path.length(); i++) {
+            char current = path.charAt(i);
+            if (!isLowercaseResourceChar(current) && current != '.' && current != '-' && current != '/') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isLowercaseResourceChar(char current) {
+        return current == '_' || current >= 'a' && current <= 'z' || current >= '0' && current <= '9';
     }
 
     private String constantName(String simpleName) {
@@ -518,14 +970,33 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         return builder.toString();
     }
 
+    private String joinSchemaConstantNames(List<FieldSpec> fields) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < fields.size(); i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append(fields.get(i).schemaConstantName());
+        }
+        return builder.toString();
+    }
+
     private List<FieldSpec> syncedFields(List<FieldSpec> fields) {
         List<FieldSpec> synced = new ArrayList<>();
         for (FieldSpec field : fields) {
-            if (!"NONE".equals(field.syncScope())) {
+            if (isClientVisibleScope(field.syncScope())) {
                 synced.add(field);
             }
         }
         return synced;
+    }
+
+    private boolean isClientVisibleScope(String syncScope) {
+        return switch (syncScope) {
+            case "CHUNK", "TRACKING", "GLOBAL" -> true;
+            case "NONE", "OWNER", "MENU" -> false;
+            default -> throw new IllegalStateException("Unsupported Pi sync scope for client view generation: " + syncScope);
+        };
     }
 
     private void writeTagWithHeader(Writer writer, List<FieldSpec> fields) throws IOException {
@@ -545,61 +1016,62 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     }
 
     private String saveExpr(FieldSpec field) {
-        return switch (field.javaType()) {
-            case "int" -> "PiSchemaSupport.putInt(\"" + field.id() + "\", self." + field.fieldName() + ")";
-            case "long" -> "PiSchemaSupport.putLong(\"" + field.id() + "\", self." + field.fieldName() + ")";
-            case "boolean" -> "PiSchemaSupport.putBoolean(\"" + field.id() + "\", self." + field.fieldName() + ")";
-            case "java.lang.String" -> "PiSchemaSupport.putString(\"" + field.id() + "\", self." + field.fieldName() + ")";
-            case "java.util.UUID" -> "PiSchemaSupport.putUUID(\"" + field.id() + "\", self." + field.fieldName() + ")";
-            case "net.minecraft.resources.ResourceLocation" -> "PiSchemaSupport.putResourceLocation(\"" + field.id() + "\", self." + field.fieldName() + ")";
-            case "java.util.List<java.lang.String>" -> "PiSchemaSupport.putStringList(\"" + field.id() + "\", self." + field.fieldName() + ")";
-            default -> throw new IllegalStateException("Unsupported field type for generation: " + field.javaType());
-        };
+        return "PiSchemaFieldCodecs.writeField(" + field.schemaConstantName() + ", self." + field.fieldName() + ")";
     }
 
     private String loadStmt(FieldSpec field) {
-        return switch (field.javaType()) {
-            case "int" -> "        self." + field.fieldName() + " = PiSchemaSupport.getInt(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "long" -> "        self." + field.fieldName() + " = PiSchemaSupport.getLong(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "boolean" -> "        self." + field.fieldName() + " = PiSchemaSupport.getBoolean(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "java.lang.String" -> "        self." + field.fieldName() + " = PiSchemaSupport.getString(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "java.util.UUID" -> "        self." + field.fieldName() + " = PiSchemaSupport.getUUID(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "net.minecraft.resources.ResourceLocation" -> "        self." + field.fieldName() + " = PiSchemaSupport.getResourceLocation(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "java.util.List<java.lang.String>" -> "        self." + field.fieldName() + ".clear();\n" +
-                    "        self." + field.fieldName() + ".addAll(PiSchemaSupport.getStringList(tag, \"" + field.id() + "\", context));\n";
-            default -> throw new IllegalStateException("Unsupported field type for generation: " + field.javaType());
-        };
+        return readStmt(field, "        ");
     }
 
     private String writeDeltaStmt(FieldSpec field) {
-        return switch (field.javaType()) {
-            case "int" -> "            tag.put(\"" + field.id() + "\", PiSchemaSupport.putInt(\"" + field.id() + "\", self." + field.fieldName() + ").getSecond());\n";
-            case "long" -> "            tag.put(\"" + field.id() + "\", PiSchemaSupport.putLong(\"" + field.id() + "\", self." + field.fieldName() + ").getSecond());\n";
-            case "boolean" -> "            tag.put(\"" + field.id() + "\", PiSchemaSupport.putBoolean(\"" + field.id() + "\", self." + field.fieldName() + ").getSecond());\n";
-            case "java.lang.String" -> "            tag.put(\"" + field.id() + "\", PiSchemaSupport.putString(\"" + field.id() + "\", self." + field.fieldName() + ").getSecond());\n";
-            case "java.util.UUID" -> "            tag.put(\"" + field.id() + "\", PiSchemaSupport.putUUID(\"" + field.id() + "\", self." + field.fieldName() + ").getSecond());\n";
-            case "net.minecraft.resources.ResourceLocation" -> "            tag.put(\"" + field.id() + "\", PiSchemaSupport.putResourceLocation(\"" + field.id() + "\", self." + field.fieldName() + ").getSecond());\n";
-            case "java.util.List<java.lang.String>" -> "            tag.put(\"" + field.id() + "\", PiSchemaSupport.putStringList(\"" + field.id() + "\", self." + field.fieldName() + ").getSecond());\n";
-            default -> throw new IllegalStateException("Unsupported field type for generation: " + field.javaType());
-        };
+        return "            tag.put(" + field.schemaConstantName() + ".key(), PiSchemaFieldCodecs.writeField(" +
+                field.schemaConstantName() + ", self." + field.fieldName() + ").getSecond());\n";
     }
 
     private String applyDeltaStmt(FieldSpec field) {
-        return switch (field.javaType()) {
-            case "int" -> "            self." + field.fieldName() + " = PiSchemaSupport.getInt(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "long" -> "            self." + field.fieldName() + " = PiSchemaSupport.getLong(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "boolean" -> "            self." + field.fieldName() + " = PiSchemaSupport.getBoolean(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "java.lang.String" -> "            self." + field.fieldName() + " = PiSchemaSupport.getString(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "java.util.UUID" -> "            self." + field.fieldName() + " = PiSchemaSupport.getUUID(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "net.minecraft.resources.ResourceLocation" -> "            self." + field.fieldName() + " = PiSchemaSupport.getResourceLocation(tag, \"" + field.id() + "\", context, self." + field.fieldName() + ");\n";
-            case "java.util.List<java.lang.String>" -> "            self." + field.fieldName() + ".clear();\n" +
-                    "            self." + field.fieldName() + ".addAll(PiSchemaSupport.getStringList(tag, \"" + field.id() + "\", context));\n";
-            default -> throw new IllegalStateException("Unsupported field type for generation: " + field.javaType());
+        return readStmt(field, "            ");
+    }
+
+    private String readStmt(FieldSpec field, String indent) {
+        String readCall = "PiSchemaFieldCodecs.readField(tag, " + field.schemaConstantName() + ", context, " + fallbackExpr(field) + ")";
+        return switch (field.accessStrategy()) {
+            case ASSIGN -> indent + "self." + field.fieldName() + " = " + readCall + ";\n";
+            case MUTATE_LIST -> {
+                String decoded = localDecodedName(field);
+                yield indent + field.valueType() + " " + decoded + " = " + readCall + ";\n"
+                        + indent + "self." + field.fieldName() + ".clear();\n"
+                        + indent + "self." + field.fieldName() + ".addAll(" + decoded + ");\n";
+            }
+            case MUTATE_SET -> {
+                String decoded = localDecodedName(field);
+                yield indent + field.valueType() + " " + decoded + " = " + readCall + ";\n"
+                        + indent + "self." + field.fieldName() + ".clear();\n"
+                        + indent + "self." + field.fieldName() + ".addAll(" + decoded + ");\n";
+            }
+            case MUTATE_MAP -> {
+                String decoded = localDecodedName(field);
+                yield indent + field.valueType() + " " + decoded + " = " + readCall + ";\n"
+                        + indent + "self." + field.fieldName() + ".clear();\n"
+                        + indent + "self." + field.fieldName() + ".putAll(" + decoded + ");\n";
+            }
         };
     }
 
-    private AnnotationMirror findAnnotation(TypeElement typeElement, String annotationName) {
-        for (AnnotationMirror annotationMirror : typeElement.getAnnotationMirrors()) {
+    private String localDecodedName(FieldSpec field) {
+        return "__pi_" + field.fieldName() + "Decoded";
+    }
+
+    private String fallbackExpr(FieldSpec field) {
+        return switch (field.accessStrategy()) {
+            case ASSIGN -> "self." + field.fieldName();
+            case MUTATE_LIST -> "new java.util.ArrayList<>(self." + field.fieldName() + ")";
+            case MUTATE_SET -> "new java.util.LinkedHashSet<>(self." + field.fieldName() + ")";
+            case MUTATE_MAP -> "new java.util.LinkedHashMap<>(self." + field.fieldName() + ")";
+        };
+    }
+
+    private AnnotationMirror findAnnotation(Element element, String annotationName) {
+        for (AnnotationMirror annotationMirror : element.getAnnotationMirrors()) {
             if (annotationName.equals(annotationMirror.getAnnotationType().toString())) {
                 return annotationMirror;
             }
@@ -635,10 +1107,48 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         return !typePackage.equals(packageName) && !"java.lang".equals(typePackage);
     }
 
-    private record FieldSpec(int index, String constantName, String fieldName, String id, String javaType, String syncScope, boolean persist) {
+    private record FieldSpec(
+            int index,
+            String constantName,
+            String schemaConstantName,
+            String fieldName,
+            String id,
+            String valueType,
+            String syncScope,
+            boolean persist,
+            String serializerExpression,
+            FieldAccessStrategy accessStrategy
+    ) {
+    }
+
+    private record ResolvedSerializer(String valueType, String serializerExpression, RawKind rawKind) {
+    }
+
+    private enum RawKind {
+        SCALAR,
+        LIST,
+        SET,
+        MAP
+    }
+
+    private enum FieldAccessStrategy {
+        ASSIGN,
+        MUTATE_LIST,
+        MUTATE_SET,
+        MUTATE_MAP
     }
 
     private record SchemaIdentity(String id, String namespace, String path) {
+    }
+
+    private record AfterDecodeSpec(String methodName) {
+        private static AfterDecodeSpec none() {
+            return new AfterDecodeSpec(null);
+        }
+
+        private boolean present() {
+            return methodName != null;
+        }
     }
 
     private record LivingServiceSpec(

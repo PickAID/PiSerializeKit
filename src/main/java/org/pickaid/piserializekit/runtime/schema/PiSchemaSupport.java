@@ -44,6 +44,17 @@ public final class PiSchemaSupport {
         return tag;
     }
 
+    @SafeVarargs
+    public static CompoundTag tagWithHeader(ResourceLocation schemaId, int version, Pair<String, Tag>... entries) {
+        Objects.requireNonNull(schemaId, "schemaId");
+        return tagWithHeader(schemaId.toString(), version, entries);
+    }
+
+    public static CompoundTag headerTag(ResourceLocation schemaId, int version) {
+        Objects.requireNonNull(schemaId, "schemaId");
+        return headerTag(schemaId.toString(), version);
+    }
+
     public static boolean validateHeader(CompoundTag tag, PiDecodeContext context, String expectedSchemaId, int expectedVersion) {
         boolean valid = true;
         Tag schemaId = tag.get(SCHEMA_ID_KEY);
@@ -70,6 +81,11 @@ public final class PiSchemaSupport {
             valid = false;
         }
         return valid;
+    }
+
+    public static boolean validateHeader(CompoundTag tag, PiDecodeContext context, ResourceLocation expectedSchemaId, int expectedVersion) {
+        Objects.requireNonNull(expectedSchemaId, "expectedSchemaId");
+        return validateHeader(tag, context, expectedSchemaId.toString(), expectedVersion);
     }
 
     public static Pair<String, Tag> putStringList(String key, List<String> values) {

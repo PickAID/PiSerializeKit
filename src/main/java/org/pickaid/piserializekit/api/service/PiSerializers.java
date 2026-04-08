@@ -2,7 +2,9 @@ package org.pickaid.piserializekit.api.service;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -11,11 +13,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.pickaid.piserializekit.PiSerializeKit;
 import org.pickaid.piserializekit.api.nbt.PiNbtCodec;
 import org.pickaid.piserializekit.api.packet.PiPacketCodec;
@@ -23,13 +28,20 @@ import org.pickaid.piserializekit.api.packet.PiPacketCodec;
 public final class PiSerializers {
     private static final String ROOT_VALUE_KEY = "__pi_value";
 
+    public static final PiSerializerType<Byte> BYTE = type("byte", Byte.class);
+    public static final PiSerializerType<Short> SHORT = type("short", Short.class);
     public static final PiSerializerType<Integer> INT = type("int", Integer.class);
     public static final PiSerializerType<Long> LONG = type("long", Long.class);
     public static final PiSerializerType<Boolean> BOOLEAN = type("boolean", Boolean.class);
+    public static final PiSerializerType<Float> FLOAT = type("float", Float.class);
+    public static final PiSerializerType<Double> DOUBLE = type("double", Double.class);
     public static final PiSerializerType<String> STRING = type("string", String.class);
     public static final PiSerializerType<UUID> UUID = type("uuid", UUID.class);
     public static final PiSerializerType<ResourceLocation> RESOURCE_LOCATION = type("resource_location", ResourceLocation.class);
     public static final PiSerializerType<CompoundTag> COMPOUND_TAG = type("compound_tag", CompoundTag.class);
+    public static final PiSerializerType<BlockPos> BLOCK_POS = type("block_pos", BlockPos.class);
+    public static final PiSerializerType<Vec3> VEC3 = type("vec3", Vec3.class);
+    public static final PiSerializerType<ItemStack> ITEM_STACK = type("item_stack", ItemStack.class);
 
     private PiSerializers() {
     }
@@ -77,6 +89,10 @@ public final class PiSerializers {
         };
     }
 
+    public static <T> PiSerializer<T> codecBacked(Codec<T> codec, PiPacketCodec<T> packetCodec) {
+        return of(codec, packetCodec);
+    }
+
     public static <T extends Enum<T>> PiSerializer<T> enumType(Class<T> enumType) {
         Objects.requireNonNull(enumType, "enumType");
         return of(
@@ -99,6 +115,40 @@ public final class PiSerializers {
                     @Override
                     public T read(FriendlyByteBuf buffer) {
                         return buffer.readEnum(enumType);
+                    }
+                }
+        );
+    }
+
+    public static <T> PiSerializer<T[]> arrayOf(Class<T[]> arrayType, PiSerializer<T> element) {
+        Objects.requireNonNull(arrayType, "arrayType");
+        Objects.requireNonNull(element, "element");
+        if (!arrayType.isArray()) {
+            throw new IllegalArgumentException("arrayType must be an array class: " + arrayType.getName());
+        }
+        Class<?> componentType = arrayType.getComponentType();
+        return of(
+                element.valueCodec().listOf().xmap(
+                        values -> toArray(arrayType, componentType, values),
+                        values -> new ArrayList<>(Arrays.asList(values))
+                ),
+                new PiPacketCodec<>() {
+                    @Override
+                    public void write(FriendlyByteBuf buffer, T[] value) {
+                        buffer.writeVarInt(value.length);
+                        for (T entry : value) {
+                            element.packetCodec().write(buffer, entry);
+                        }
+                    }
+
+                    @Override
+                    public T[] read(FriendlyByteBuf buffer) {
+                        int size = buffer.readVarInt();
+                        T[] values = newArray(componentType, size);
+                        for (int i = 0; i < size; i++) {
+                            values[i] = element.packetCodec().read(buffer);
+                        }
+                        return values;
                     }
                 }
         );
@@ -211,6 +261,16 @@ public final class PiSerializers {
             return tag.get(ROOT_VALUE_KEY);
         }
         return tag;
+    }
+
+    private static <T> T[] toArray(Class<T[]> arrayType, Class<?> componentType, List<T> values) {
+        T[] array = newArray(componentType, values.size());
+        return values.toArray(array);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T[] newArray(Class<?> componentType, int size) {
+        return (T[]) Array.newInstance(componentType, size);
     }
 
     private static <T> T require(DataResult<T> result, String action) {
