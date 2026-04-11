@@ -4,16 +4,19 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;
 import java.util.Objects;
-import java.util.stream.Collectors;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
+import org.pickaid.piserializekit.api.packet.PiPacketDecodeException;
 import org.pickaid.piserializekit.api.nbt.PiNbtCodec;
 import org.pickaid.piserializekit.api.packet.PiPacketCodec;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
+import org.pickaid.piserializekit.api.schema.PiDecodeException;
+import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
 import org.pickaid.piserializekit.api.schema.PiStateBinding;
 import org.pickaid.piserializekit.api.service.PiSerializer;
+import org.pickaid.piserializekit.runtime.packet.PiPacketSupport;
 
 /**
  * Serializer adapters backed by generated Pi schema bindings.
@@ -46,12 +49,22 @@ public final class PiSchemaSerializers {
             }
 
             @Override
-            public T read(FriendlyByteBuf buffer) {
-                CompoundTag tag = buffer.readNbt();
+            public T read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                CompoundTag tag = PiPacketSupport.safeRead(context, "", buffer::readNbt, null);
                 if (tag == null) {
-                    throw new IllegalStateException("Missing Pi schema payload for " + binding(stateType).schemaId());
+                    return binding(stateType).newState();
                 }
-                return decodeState(tag, binding(stateType));
+                return decodeState(tag, binding(stateType), context);
+            }
+
+            @Override
+            public T read(FriendlyByteBuf buffer) {
+                PiDecodeContext context = PiDecodeContext.strict();
+                T value = read(buffer, context);
+                if (context.result().hasIssues()) {
+                    throw new PiPacketDecodeException(binding(stateType).schemaId(), context.result());
+                }
+                return value;
             }
         };
         return new PiSerializer<>() {
@@ -82,21 +95,27 @@ public final class PiSchemaSerializers {
         }
         try {
             return DataResult.success(decodeState(compoundTag, binding));
+        } catch (PiDecodeException exception) {
+            return DataResult.error(exception::getMessage);
         } catch (IllegalStateException exception) {
             return DataResult.error(exception::getMessage);
         }
     }
 
     private static <T> T decodeState(CompoundTag tag, PiStateBinding<T> binding) {
-        T state = binding.newState();
         PiDecodeContext context = PiDecodeContext.strict();
-        binding.loadFull(state, tag.copy(), context);
-        if (!context.result().issues().isEmpty()) {
-            throw new IllegalStateException(
-                    "Failed to decode Pi schema " + binding.schemaId() + ": " + context.result().issues().stream()
-                            .map(issue -> issue.path() + " -> " + issue.message())
-                            .collect(Collectors.joining("; "))
-            );
+        T state = decodeState(tag, binding, context);
+        if (context.result().hasIssues()) {
+            throw new PiDecodeException(binding.schemaId(), context.result());
+        }
+        return state;
+    }
+
+    private static <T> T decodeState(CompoundTag tag, PiStateBinding<T> binding, PiDecodeContext context) {
+        T state = binding.newState();
+        CompoundTag payload = PiSchemaSupport.preparePayload(tag, context, binding, PiSchemaPayloadKind.FULL);
+        if (payload != null) {
+            binding.loadFull(state, payload, context);
         }
         return state;
     }

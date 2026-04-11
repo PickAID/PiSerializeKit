@@ -24,6 +24,8 @@ import net.minecraft.world.phys.Vec3;
 import org.pickaid.piserializekit.PiSerializeKit;
 import org.pickaid.piserializekit.api.nbt.PiNbtCodec;
 import org.pickaid.piserializekit.api.packet.PiPacketCodec;
+import org.pickaid.piserializekit.api.schema.PiDecodeContext;
+import org.pickaid.piserializekit.runtime.packet.PiPacketSupport;
 
 public final class PiSerializers {
     private static final String ROOT_VALUE_KEY = "__pi_value";
@@ -113,8 +115,10 @@ public final class PiSerializers {
                     }
 
                     @Override
-                    public T read(FriendlyByteBuf buffer) {
-                        return buffer.readEnum(enumType);
+                    public T read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                        T[] constants = enumType.getEnumConstants();
+                        T fallback = constants.length == 0 ? null : constants[0];
+                        return PiPacketSupport.safeRead(context, "", () -> buffer.readEnum(enumType), fallback);
                     }
                 }
         );
@@ -142,11 +146,11 @@ public final class PiSerializers {
                     }
 
                     @Override
-                    public T[] read(FriendlyByteBuf buffer) {
-                        int size = buffer.readVarInt();
+                    public T[] read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                        int size = PiPacketSupport.safeRead(context, "", buffer::readVarInt, 0);
                         T[] values = newArray(componentType, size);
                         for (int i = 0; i < size; i++) {
-                            values[i] = element.packetCodec().read(buffer);
+                            values[i] = element.packetCodec().read(buffer, context.child("[" + i + "]"));
                         }
                         return values;
                     }
@@ -166,8 +170,9 @@ public final class PiSerializers {
                     }
 
                     @Override
-                    public Optional<T> read(FriendlyByteBuf buffer) {
-                        return buffer.readBoolean() ? Optional.of(element.packetCodec().read(buffer)) : Optional.empty();
+                    public Optional<T> read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                        boolean present = PiPacketSupport.safeRead(context, "", buffer::readBoolean, false);
+                        return present ? Optional.ofNullable(element.packetCodec().read(buffer, context.child("value"))) : Optional.empty();
                     }
                 }
         );
@@ -187,11 +192,11 @@ public final class PiSerializers {
                     }
 
                     @Override
-                    public List<T> read(FriendlyByteBuf buffer) {
-                        int size = buffer.readVarInt();
+                    public List<T> read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                        int size = PiPacketSupport.safeRead(context, "", buffer::readVarInt, 0);
                         List<T> values = new ArrayList<>(size);
                         for (int i = 0; i < size; i++) {
-                            values.add(element.packetCodec().read(buffer));
+                            values.add(element.packetCodec().read(buffer, context.child("[" + i + "]")));
                         }
                         return values;
                     }
@@ -213,11 +218,11 @@ public final class PiSerializers {
                     }
 
                     @Override
-                    public Set<T> read(FriendlyByteBuf buffer) {
-                        int size = buffer.readVarInt();
+                    public Set<T> read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                        int size = PiPacketSupport.safeRead(context, "", buffer::readVarInt, 0);
                         Set<T> values = new LinkedHashSet<>(size);
                         for (int i = 0; i < size; i++) {
-                            values.add(element.packetCodec().read(buffer));
+                            values.add(element.packetCodec().read(buffer, context.child("[" + i + "]")));
                         }
                         return values;
                     }
@@ -242,12 +247,12 @@ public final class PiSerializers {
                     }
 
                     @Override
-                    public Map<K, V> read(FriendlyByteBuf buffer) {
-                        int size = buffer.readVarInt();
+                    public Map<K, V> read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                        int size = PiPacketSupport.safeRead(context, "", buffer::readVarInt, 0);
                         Map<K, V> values = new LinkedHashMap<>(size);
                         for (int i = 0; i < size; i++) {
-                            K key = keySerializer.packetCodec().read(buffer);
-                            V value = valueSerializer.packetCodec().read(buffer);
+                            K key = keySerializer.packetCodec().read(buffer, context.child("[" + i + "].key"));
+                            V value = valueSerializer.packetCodec().read(buffer, context.child("[" + i + "].value"));
                             values.put(key, value);
                         }
                         return values;

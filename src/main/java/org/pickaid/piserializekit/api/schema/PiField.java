@@ -30,4 +30,9 @@ public @interface PiField {
      * Returns the optional field-local serializer provider.
      */
     Class<? extends PiFieldCodecProvider<?>> serializer() default PiInferredFieldCodec.class;
+
+    /**
+     * Returns how full and delta payloads should be applied to the field.
+     */
+    PiFieldDeltaMode delta() default PiFieldDeltaMode.REPLACE;
 }

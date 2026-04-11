@@ -85,7 +85,7 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "SCHEMA_ID,");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "VERSION,");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static void loadFull(TrialState self, CompoundTag tag, PiDecodeContext context)");
-        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "if (!PiSchemaSupport.validateHeader(tag, context, SCHEMA_ID, VERSION)) {");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "CompoundTag __pi_payload = PiSchemaSupport.preparePayload(tag, context, BINDING, PiSchemaPayloadKind.FULL);");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static CompoundTag writeDelta(TrialState self, PiDirtySet dirtySet)");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "CompoundTag tag = PiSchemaSupport.headerTag(SCHEMA_ID, VERSION);");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static void applyDelta(TrialState self, CompoundTag tag, PiDecodeContext context)");
@@ -94,11 +94,18 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final List<PiSchemaField<?>> SCHEMA_FIELDS = List.of(PLAYERS_FIELD, ENERGY_FIELD);");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "PiSchemaFieldCodecs.writeField(PLAYERS_FIELD, self.players)");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "PiSchemaFieldCodecs.writeField(ENERGY_FIELD, self.energy)");
-        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "java.util.List<java.lang.String> __pi_playersDecoded = PiSchemaFieldCodecs.readField(tag, PLAYERS_FIELD, context, new java.util.ArrayList<>(self.players));");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static PiStateSnapshot snapshot(TrialState self)");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "new net.minecraft.nbt.Tag[]{");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static PiDirtyBits diff(TrialState self, PiStateSnapshot snapshot)");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "java.util.List<java.lang.String> __pi_playersDecoded = PiSchemaFieldCodecs.readField(__pi_payload, PLAYERS_FIELD, context, new java.util.ArrayList<>(self.players));");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "self.players.addAll(__pi_playersDecoded);");
-        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "self.energy = PiSchemaFieldCodecs.readField(tag, ENERGY_FIELD, context, self.energy);");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "self.energy = PiSchemaFieldCodecs.readField(__pi_payload, ENERGY_FIELD, context, self.energy);");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "dirtySet.contains(TrialState_PiFields.PLAYERS)");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "dirtySet.contains(TrialState_PiFields.ENERGY)");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public PiStateSnapshot snapshot(TrialState self)");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return TrialState_PiSchema.snapshot(self);");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public PiDirtyBits diff(TrialState self, PiStateSnapshot snapshot)");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return TrialState_PiSchema.diff(self, snapshot);");
     }
 
     @Test
@@ -140,10 +147,10 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "PiSchemaFieldCodecs.writeField(OWNER_NAME_FIELD, self.ownerName)");
         assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "PiSchemaFieldCodecs.writeField(RUN_ID_FIELD, self.runId)");
         assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "PiSchemaFieldCodecs.writeField(TRIAL_FIELD, self.trial)");
-        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.active = PiSchemaFieldCodecs.readField(tag, ACTIVE_FIELD, context, self.active);");
-        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.ownerName = PiSchemaFieldCodecs.readField(tag, OWNER_NAME_FIELD, context, self.ownerName);");
-        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.runId = PiSchemaFieldCodecs.readField(tag, RUN_ID_FIELD, context, self.runId);");
-        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.trial = PiSchemaFieldCodecs.readField(tag, TRIAL_FIELD, context, self.trial);");
+        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.active = PiSchemaFieldCodecs.readField(__pi_payload, ACTIVE_FIELD, context, self.active);");
+        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.ownerName = PiSchemaFieldCodecs.readField(__pi_payload, OWNER_NAME_FIELD, context, self.ownerName);");
+        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.runId = PiSchemaFieldCodecs.readField(__pi_payload, RUN_ID_FIELD, context, self.runId);");
+        assertGeneratedContains(compilation, "example.AdvancedState_PiSchema", "self.trial = PiSchemaFieldCodecs.readField(__pi_payload, TRIAL_FIELD, context, self.trial);");
         assertGeneratedContains(compilation, "example.AdvancedState_PiSchemaProvider", "public final class AdvancedState_PiSchemaProvider implements PiSchemaProvider");
         assertGeneratedContains(compilation, "example.AdvancedState_PiSchemaProvider", "registry.register(AdvancedState.class, AdvancedState_PiSchema.BINDING);");
     }
@@ -182,10 +189,10 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.NumericState_PiSchema", "PiSchemaFieldCodecs.writeField(TIER_FIELD, self.tier)");
         assertGeneratedContains(compilation, "example.NumericState_PiSchema", "PiSchemaFieldCodecs.writeField(RATIO_FIELD, self.ratio)");
         assertGeneratedContains(compilation, "example.NumericState_PiSchema", "PiSchemaFieldCodecs.writeField(PRECISION_FIELD, self.precision)");
-        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.heat = PiSchemaFieldCodecs.readField(tag, HEAT_FIELD, context, self.heat);");
-        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.tier = PiSchemaFieldCodecs.readField(tag, TIER_FIELD, context, self.tier);");
-        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.ratio = PiSchemaFieldCodecs.readField(tag, RATIO_FIELD, context, self.ratio);");
-        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.precision = PiSchemaFieldCodecs.readField(tag, PRECISION_FIELD, context, self.precision);");
+        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.heat = PiSchemaFieldCodecs.readField(__pi_payload, HEAT_FIELD, context, self.heat);");
+        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.tier = PiSchemaFieldCodecs.readField(__pi_payload, TIER_FIELD, context, self.tier);");
+        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.ratio = PiSchemaFieldCodecs.readField(__pi_payload, RATIO_FIELD, context, self.ratio);");
+        assertGeneratedContains(compilation, "example.NumericState_PiSchema", "self.precision = PiSchemaFieldCodecs.readField(__pi_payload, PRECISION_FIELD, context, self.precision);");
     }
 
     @Test
@@ -214,6 +221,113 @@ class PiSyncModelProcessorTest {
 
         assertThat(compilation).succeeded();
         assertGeneratedContains(compilation, "example.HookedState_PiSchema", "self.normalize();");
+    }
+
+    @Test
+    void generatesMigrationChainAndPayloadPreparationCalls() throws Exception {
+        JavaFileObject source = JavaFileObjects.forSourceLines(
+                "example.LegacyState",
+                "package example;",
+                "import net.minecraft.nbt.CompoundTag;",
+                "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
+                "import org.pickaid.piserializekit.api.schema.PiField;",
+                "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
+                "import org.pickaid.piserializekit.api.schema.PiSchemaUpgrade;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
+                "@PiSyncModel(id = \"example:legacy_state\", version = 3)",
+                "public final class LegacyState {",
+                "  @PiField(id = \"value\", sync = PiSyncScope.TRACKING, persist = true)",
+                "  public int value;",
+                "  @PiSchemaUpgrade(from = 1, to = 2)",
+                "  static CompoundTag upgradeV1ToV2(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
+                "    return payload;",
+                "  }",
+                "  @PiSchemaUpgrade(from = 2, to = 3)",
+                "  static CompoundTag upgradeV2ToV3(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
+                "    return payload;",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(source);
+
+        assertThat(compilation).succeeded();
+        assertGeneratedContains(compilation, "example.LegacyState_PiSchema", "public static final List<PiSchemaMigration> MIGRATIONS = List.of(");
+        assertGeneratedContains(compilation, "example.LegacyState_PiSchema", "PiSchemaMigration.step(1, 2, LegacyState::upgradeV1ToV2)");
+        assertGeneratedContains(compilation, "example.LegacyState_PiSchema", "PiSchemaMigration.step(2, 3, LegacyState::upgradeV2ToV3)");
+        assertGeneratedContains(compilation, "example.LegacyState_PiSchema", "public List<PiSchemaMigration> migrations()");
+        assertGeneratedContains(compilation, "example.LegacyState_PiSchema", "return MIGRATIONS;");
+        assertGeneratedContains(compilation, "example.LegacyState_PiSchema", "CompoundTag __pi_payload = PiSchemaSupport.preparePayload(tag, context, BINDING, PiSchemaPayloadKind.FULL);");
+        assertGeneratedContains(compilation, "example.LegacyState_PiSchema", "CompoundTag __pi_payload = PiSchemaSupport.preparePayload(tag, context, BINDING, PiSchemaPayloadKind.DELTA);");
+    }
+
+    @Test
+    void rejectsSchemaMigrationChainsThatLeaveOlderVersionsUnreachable() {
+        JavaFileObject source = JavaFileObjects.forSourceLines(
+                "example.GappedLegacyState",
+                "package example;",
+                "import net.minecraft.nbt.CompoundTag;",
+                "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
+                "import org.pickaid.piserializekit.api.schema.PiField;",
+                "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
+                "import org.pickaid.piserializekit.api.schema.PiSchemaUpgrade;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
+                "@PiSyncModel(id = \"example:gapped_legacy_state\", version = 4)",
+                "public final class GappedLegacyState {",
+                "  @PiField(id = \"value\", sync = PiSyncScope.TRACKING, persist = true)",
+                "  public int value;",
+                "  @PiSchemaUpgrade(from = 1, to = 3)",
+                "  static CompoundTag upgradeV1ToV3(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
+                "    return payload;",
+                "  }",
+                "  @PiSchemaUpgrade(from = 3, to = 4)",
+                "  static CompoundTag upgradeV3ToV4(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
+                "    return payload;",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(source);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("@PiSchemaUpgrade chain must define a migration path from version 2 to 4");
+    }
+
+    @Test
+    void rejectsSchemaMigrationsThatOvershootDeclaredSchemaVersion() {
+        JavaFileObject source = JavaFileObjects.forSourceLines(
+                "example.OvershootLegacyState",
+                "package example;",
+                "import net.minecraft.nbt.CompoundTag;",
+                "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
+                "import org.pickaid.piserializekit.api.schema.PiField;",
+                "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
+                "import org.pickaid.piserializekit.api.schema.PiSchemaUpgrade;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
+                "@PiSyncModel(id = \"example:overshoot_legacy_state\", version = 3)",
+                "public final class OvershootLegacyState {",
+                "  @PiField(id = \"value\", sync = PiSyncScope.TRACKING, persist = true)",
+                "  public int value;",
+                "  @PiSchemaUpgrade(from = 1, to = 4)",
+                "  static CompoundTag upgradeV1ToV4(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
+                "    return payload;",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(source);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("@PiSchemaUpgrade.to cannot exceed declared schema version 3");
     }
 
     @Test
@@ -262,10 +376,10 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "public static final PiSchemaField<net.minecraft.world.item.ItemStack> REWARD_FIELD = new PiSchemaField<>(REWARD, new example.GhostSlotCodec().serializer());");
         assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "public static final PiSchemaField<java.util.Optional<net.minecraft.core.BlockPos>> ANCHOR_FIELD = new PiSchemaField<>(ANCHOR, PiSerializers.optionalOf(requireSerializer(PiSerializers.BLOCK_POS)));");
         assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "PiSchemaFieldCodecs.writeField(TARGETS_FIELD, self.targets)");
-        assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "java.util.List<net.minecraft.core.BlockPos> __pi_targetsDecoded = PiSchemaFieldCodecs.readField(tag, TARGETS_FIELD, context, new java.util.ArrayList<>(self.targets));");
+        assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "java.util.List<net.minecraft.core.BlockPos> __pi_targetsDecoded = PiSchemaFieldCodecs.readField(__pi_payload, TARGETS_FIELD, context, new java.util.ArrayList<>(self.targets));");
         assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "self.targets.addAll(__pi_targetsDecoded);");
-        assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "self.reward = PiSchemaFieldCodecs.readField(tag, REWARD_FIELD, context, self.reward);");
-        assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "self.anchor = PiSchemaFieldCodecs.readField(tag, ANCHOR_FIELD, context, self.anchor);");
+        assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "self.reward = PiSchemaFieldCodecs.readField(__pi_payload, REWARD_FIELD, context, self.reward);");
+        assertGeneratedContains(compilation, "example.ComplexState_PiSchema", "self.anchor = PiSchemaFieldCodecs.readField(__pi_payload, ANCHOR_FIELD, context, self.anchor);");
     }
 
     @Test
@@ -303,9 +417,9 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.GraphState_PiSchema", "public static final PiSchemaField<example.GraphState.Mode> MODE_FIELD = new PiSchemaField<>(MODE, PiSerializers.enumType(example.GraphState.Mode.class));");
         assertGeneratedContains(compilation, "example.GraphState_PiSchema", "public static final PiSchemaField<java.util.Set<net.minecraft.resources.ResourceLocation>> CHECKPOINTS_FIELD = new PiSchemaField<>(CHECKPOINTS, PiSerializers.setOf(requireSerializer(PiSerializers.RESOURCE_LOCATION)));");
         assertGeneratedContains(compilation, "example.GraphState_PiSchema", "public static final PiSchemaField<java.util.Map<java.lang.String, java.lang.Integer>> WEIGHTS_FIELD = new PiSchemaField<>(WEIGHTS, PiSerializers.mapOf(requireSerializer(PiSerializers.STRING), requireSerializer(PiSerializers.INT)));");
-        assertGeneratedContains(compilation, "example.GraphState_PiSchema", "java.util.Set<net.minecraft.resources.ResourceLocation> __pi_checkpointsDecoded = PiSchemaFieldCodecs.readField(tag, CHECKPOINTS_FIELD, context, new java.util.LinkedHashSet<>(self.checkpoints));");
+        assertGeneratedContains(compilation, "example.GraphState_PiSchema", "java.util.Set<net.minecraft.resources.ResourceLocation> __pi_checkpointsDecoded = PiSchemaFieldCodecs.readField(__pi_payload, CHECKPOINTS_FIELD, context, new java.util.LinkedHashSet<>(self.checkpoints));");
         assertGeneratedContains(compilation, "example.GraphState_PiSchema", "self.checkpoints.addAll(__pi_checkpointsDecoded);");
-        assertGeneratedContains(compilation, "example.GraphState_PiSchema", "java.util.Map<java.lang.String, java.lang.Integer> __pi_weightsDecoded = PiSchemaFieldCodecs.readField(tag, WEIGHTS_FIELD, context, new java.util.LinkedHashMap<>(self.weights));");
+        assertGeneratedContains(compilation, "example.GraphState_PiSchema", "java.util.Map<java.lang.String, java.lang.Integer> __pi_weightsDecoded = PiSchemaFieldCodecs.readField(__pi_payload, WEIGHTS_FIELD, context, new java.util.LinkedHashMap<>(self.weights));");
         assertGeneratedContains(compilation, "example.GraphState_PiSchema", "self.weights.putAll(__pi_weightsDecoded);");
     }
 
@@ -341,37 +455,110 @@ class PiSyncModelProcessorTest {
                 compilation,
                 "example.VisibilityState_PiSchema",
                 "public static CompoundTag saveClientView(VisibilityState self)",
-                "public static void loadFull(VisibilityState self, CompoundTag tag, PiDecodeContext context)",
+                "public static CompoundTag savePersisted(VisibilityState self)",
                 "PiSchemaFieldCodecs.writeField(CHUNK_FIELD, self.chunk)"
         );
         assertMethodContains(
                 compilation,
                 "example.VisibilityState_PiSchema",
                 "public static CompoundTag saveClientView(VisibilityState self)",
-                "public static void loadFull(VisibilityState self, CompoundTag tag, PiDecodeContext context)",
+                "public static CompoundTag savePersisted(VisibilityState self)",
                 "PiSchemaFieldCodecs.writeField(TRACKING_FIELD, self.tracking)"
         );
         assertMethodContains(
                 compilation,
                 "example.VisibilityState_PiSchema",
                 "public static CompoundTag saveClientView(VisibilityState self)",
-                "public static void loadFull(VisibilityState self, CompoundTag tag, PiDecodeContext context)",
+                "public static CompoundTag savePersisted(VisibilityState self)",
                 "PiSchemaFieldCodecs.writeField(GLOBAL_FIELD, self.global)"
         );
         assertMethodNotContains(
                 compilation,
                 "example.VisibilityState_PiSchema",
                 "public static CompoundTag saveClientView(VisibilityState self)",
-                "public static void loadFull(VisibilityState self, CompoundTag tag, PiDecodeContext context)",
+                "public static CompoundTag savePersisted(VisibilityState self)",
                 "PiSchemaFieldCodecs.writeField(OWNER_FIELD, self.owner)"
         );
         assertMethodNotContains(
                 compilation,
                 "example.VisibilityState_PiSchema",
                 "public static CompoundTag saveClientView(VisibilityState self)",
-                "public static void loadFull(VisibilityState self, CompoundTag tag, PiDecodeContext context)",
+                "public static CompoundTag savePersisted(VisibilityState self)",
                 "PiSchemaFieldCodecs.writeField(MENU_FIELD, self.menu)"
         );
+    }
+
+    @Test
+    void persistedViewEmitsOnlyPersistentFields() throws Exception {
+        JavaFileObject source = JavaFileObjects.forSourceLines(
+                "example.PersistenceState",
+                "package example;",
+                "import org.pickaid.piserializekit.api.schema.PiField;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
+                "@PiSyncModel(id = \"example:persistence_state\", version = 1)",
+                "public final class PersistenceState {",
+                "  @PiField(id = \"phase\", sync = PiSyncScope.GLOBAL, persist = true)",
+                "  public int phase;",
+                "  @PiField(id = \"reward\", sync = PiSyncScope.OWNER, persist = true)",
+                "  public String reward = \"fallback\";",
+                "  @PiField(id = \"menu\", sync = PiSyncScope.MENU, persist = false)",
+                "  public int menu;",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(source);
+
+        assertThat(compilation).succeeded();
+        assertMethodContains(
+                compilation,
+                "example.PersistenceState_PiSchema",
+                "public static CompoundTag savePersisted(PersistenceState self)",
+                "public static PiStateSnapshot snapshot(PersistenceState self)",
+                "PiSchemaFieldCodecs.writeField(PHASE_FIELD, self.phase)"
+        );
+        assertMethodContains(
+                compilation,
+                "example.PersistenceState_PiSchema",
+                "public static CompoundTag savePersisted(PersistenceState self)",
+                "public static PiStateSnapshot snapshot(PersistenceState self)",
+                "PiSchemaFieldCodecs.writeField(REWARD_FIELD, self.reward)"
+        );
+        assertMethodNotContains(
+                compilation,
+                "example.PersistenceState_PiSchema",
+                "public static CompoundTag savePersisted(PersistenceState self)",
+                "public static PiStateSnapshot snapshot(PersistenceState self)",
+                "PiSchemaFieldCodecs.writeField(MENU_FIELD, self.menu)"
+        );
+        assertGeneratedContains(compilation, "example.PersistenceState_PiSchema", "CompoundTag __pi_payload = PiSchemaSupport.preparePayload(tag, context, BINDING, PiSchemaPayloadKind.PERSISTED);");
+    }
+
+    @Test
+    void rejectsDuplicatePiFieldIdsWithinOneState() {
+        JavaFileObject source = JavaFileObjects.forSourceLines(
+                "example.DuplicateFieldIdState",
+                "package example;",
+                "import org.pickaid.piserializekit.api.schema.PiField;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
+                "@PiSyncModel(id = \"example:duplicate_field_id_state\", version = 1)",
+                "public final class DuplicateFieldIdState {",
+                "  @PiField(id = \"count\", sync = PiSyncScope.CHUNK, persist = true)",
+                "  public int count;",
+                "  @PiField(id = \"count\", sync = PiSyncScope.TRACKING, persist = true)",
+                "  public int mirroredCount;",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(source);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("Duplicate @PiField.id \"count\" in DuplicateFieldIdState");
     }
 
     @Test
@@ -409,7 +596,65 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.ParentState_PiSchema", "import org.pickaid.piserializekit.runtime.schema.PiSchemaSerializers;");
         assertGeneratedContains(compilation, "example.ParentState_PiSchema", "public static final PiSchemaField<example.ChildState> CHILD_FIELD = new PiSchemaField<>(CHILD, PiSchemaSerializers.forState(example.ChildState.class));");
         assertGeneratedContains(compilation, "example.ParentState_PiSchema", "PiSchemaFieldCodecs.writeField(CHILD_FIELD, self.child)");
-        assertGeneratedContains(compilation, "example.ParentState_PiSchema", "self.child = PiSchemaFieldCodecs.readField(tag, CHILD_FIELD, context, self.child);");
+        assertGeneratedContains(compilation, "example.ParentState_PiSchema", "self.child = PiSchemaFieldCodecs.readField(__pi_payload, CHILD_FIELD, context, self.child);");
+    }
+
+    @Test
+    void mergeDeltaModesEmitAdditiveApplyLogicForSetsAndMaps() throws Exception {
+        JavaFileObject source = JavaFileObjects.forSourceLines(
+                "example.MergeState",
+                "package example;",
+                "import java.util.LinkedHashMap;",
+                "import java.util.LinkedHashSet;",
+                "import java.util.Map;",
+                "import java.util.Set;",
+                "import net.minecraft.resources.ResourceLocation;",
+                "import org.pickaid.piserializekit.api.schema.PiField;",
+                "import org.pickaid.piserializekit.api.schema.PiFieldDeltaMode;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncModel;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
+                "@PiSyncModel(id = \"example:merge_state\", version = 1)",
+                "public final class MergeState {",
+                "  @PiField(id = \"checkpoints\", sync = PiSyncScope.TRACKING, persist = true, delta = PiFieldDeltaMode.MERGE_SET)",
+                "  public final Set<ResourceLocation> checkpoints = new LinkedHashSet<>();",
+                "  @PiField(id = \"weights\", sync = PiSyncScope.TRACKING, persist = true, delta = PiFieldDeltaMode.MERGE_MAP)",
+                "  public final Map<String, Integer> weights = new LinkedHashMap<>();",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(source);
+
+        assertThat(compilation).succeeded();
+        assertMethodContains(
+                compilation,
+                "example.MergeState_PiSchema",
+                "public static void applyDelta(MergeState self, CompoundTag tag, PiDecodeContext context)",
+                "private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type)",
+                "self.checkpoints.addAll(__pi_checkpointsDecoded);"
+        );
+        assertMethodNotContains(
+                compilation,
+                "example.MergeState_PiSchema",
+                "public static void applyDelta(MergeState self, CompoundTag tag, PiDecodeContext context)",
+                "private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type)",
+                "self.checkpoints.clear();"
+        );
+        assertMethodContains(
+                compilation,
+                "example.MergeState_PiSchema",
+                "public static void applyDelta(MergeState self, CompoundTag tag, PiDecodeContext context)",
+                "private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type)",
+                "self.weights.putAll(__pi_weightsDecoded);"
+        );
+        assertMethodNotContains(
+                compilation,
+                "example.MergeState_PiSchema",
+                "public static void applyDelta(MergeState self, CompoundTag tag, PiDecodeContext context)",
+                "private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type)",
+                "self.weights.clear();"
+        );
     }
 
     @Test

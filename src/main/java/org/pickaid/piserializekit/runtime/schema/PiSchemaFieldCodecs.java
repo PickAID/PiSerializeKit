@@ -5,6 +5,9 @@ import java.util.Objects;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
+import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;
+import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
+import org.pickaid.piserializekit.api.schema.PiStateBinding;
 import org.pickaid.piserializekit.api.service.PiSerializer;
 
 /**
@@ -39,7 +42,7 @@ public final class PiSchemaFieldCodecs {
         Objects.requireNonNull(context, "context");
         Tag raw = root.get(key);
         if (raw == null) {
-            context.issue(key, "missing field payload", false);
+            context.issue(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, key, "missing field payload", false);
             return fallback;
         }
         if (raw instanceof CompoundTag compound) {
@@ -62,8 +65,44 @@ public final class PiSchemaFieldCodecs {
             return serializer.nbtCodec().decode(payload);
         } catch (RuntimeException exception) {
             String message = exception.getMessage();
-            context.issue(key, "failed to decode " + label + (message == null ? "" : ": " + message), false);
+            context.issue(
+                    PiDecodeIssueCode.SERIALIZER_FAILURE,
+                    key,
+                    "failed to decode " + label + (message == null ? "" : ": " + message),
+                    false
+            );
             return fallback;
         }
+    }
+
+    public static <T> T readNestedField(
+            CompoundTag root,
+            String key,
+            PiStateBinding<T> binding,
+            PiDecodeContext context,
+            T current,
+            PiSchemaPayloadKind kind
+    ) {
+        Objects.requireNonNull(root, "root");
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(binding, "binding");
+        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(kind, "kind");
+        Tag raw = root.get(key);
+        if (raw == null) {
+            context.issue(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, key, "missing field payload", false);
+            return current;
+        }
+        if (!(raw instanceof CompoundTag compound)) {
+            context.issue(PiDecodeIssueCode.TYPE_MISMATCH, key, "expected compound field payload", false);
+            return current;
+        }
+        T target = current != null ? current : binding.newState();
+        switch (kind) {
+            case FULL -> binding.loadFull(target, compound, context);
+            case PERSISTED -> binding.loadPersisted(target, compound, context);
+            case DELTA -> binding.applyDelta(target, compound, context);
+        }
+        return target;
     }
 }

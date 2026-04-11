@@ -2,20 +2,30 @@ package org.pickaid.piserializekit.runtime.schema;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
+import org.pickaid.piserializekit.api.schema.PiDecodeException;
+import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;
 import org.pickaid.piserializekit.api.schema.PiDirtySet;
 import org.pickaid.piserializekit.api.schema.PiFieldDescriptor;
 import org.pickaid.piserializekit.api.schema.PiFieldKey;
+import org.pickaid.piserializekit.api.schema.PiProjections;
+import org.pickaid.piserializekit.api.schema.PiSchemaMigration;
+import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
+import org.pickaid.piserializekit.api.schema.PiStateSnapshot;
 import org.pickaid.piserializekit.api.schema.PiStateBinding;
 import org.pickaid.piserializekit.api.schema.PiSyncSchema;
 import org.pickaid.piserializekit.api.schema.PiSyncScope;
@@ -38,10 +48,44 @@ class PiSchemaRuntimeTest {
             new PiFieldDescriptor(COST, PiSyncScope.OWNER, true),
             serializer(PiSerializers.LONG)
     );
+    private static final PiFieldKey LEGACY_VALUE = new PiFieldKey(2, "value");
+    private static final PiFieldKey LEGACY_LABEL = new PiFieldKey(3, "label");
+    private static final ResourceLocation LEGACY_SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "legacy_state");
+    private static final int LEGACY_VERSION = 3;
+    private static final PiSchemaField<Integer> LEGACY_VALUE_FIELD = new PiSchemaField<>(
+            new PiFieldDescriptor(LEGACY_VALUE, PiSyncScope.TRACKING, true),
+            serializer(PiSerializers.INT)
+    );
+    private static final PiSchemaField<String> LEGACY_LABEL_FIELD = new PiSchemaField<>(
+            new PiFieldDescriptor(LEGACY_LABEL, PiSyncScope.TRACKING, true),
+            serializer(PiSerializers.STRING)
+    );
+    private static final PiFieldKey CHECKPOINTS = new PiFieldKey(4, "checkpoints");
+    private static final PiFieldKey MENU_PAGE = new PiFieldKey(5, "menu_page");
+    private static final ResourceLocation MANUAL_PERSISTED_SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "manual_persisted_state");
+    private static final int MANUAL_PERSISTED_VERSION = 1;
+    private static final PiSchemaField<Set<String>> CHECKPOINTS_FIELD = new PiSchemaField<>(
+            new PiFieldDescriptor(CHECKPOINTS, PiSyncScope.TRACKING, true),
+            PiSerializers.setOf(serializer(PiSerializers.STRING))
+    );
+    private static final PiSchemaField<Integer> MENU_PAGE_FIELD = new PiSchemaField<>(
+            new PiFieldDescriptor(MENU_PAGE, PiSyncScope.MENU, false),
+            serializer(PiSerializers.INT)
+    );
 
     private static final class TestState {
         private final List<String> players = new ArrayList<>();
         private long cost;
+    }
+
+    private static final class LegacyState {
+        private int value;
+        private String label = "unset";
+    }
+
+    private static final class ManualPersistedState {
+        private final Set<String> checkpoints = new LinkedHashSet<>();
+        private int menuPage;
     }
 
     private static final class TestSchema implements PiSyncSchema<TestState> {
@@ -98,6 +142,199 @@ class PiSchemaRuntimeTest {
             if (tag.contains(COST_FIELD.key())) {
                 self.cost = PiSchemaFieldCodecs.readField(tag, COST_FIELD, context, self.cost);
             }
+        }
+    }
+
+    private static class LegacyBinding implements PiStateBinding<LegacyState> {
+        @Override
+        public ResourceLocation schemaId() {
+            return LEGACY_SCHEMA_ID;
+        }
+
+        @Override
+        public int version() {
+            return LEGACY_VERSION;
+        }
+
+        @Override
+        public Class<LegacyState> stateType() {
+            return LegacyState.class;
+        }
+
+        @Override
+        public LegacyState newState() {
+            return new LegacyState();
+        }
+
+        @Override
+        public List<PiFieldDescriptor> fields() {
+            return List.of(LEGACY_VALUE_FIELD.descriptor(), LEGACY_LABEL_FIELD.descriptor());
+        }
+
+        @Override
+        public List<PiSchemaMigration> migrations() {
+            return List.of(
+                    PiSchemaMigration.step(1, 2, LegacyBinding::upgradeV1ToV2),
+                    PiSchemaMigration.step(2, 3, LegacyBinding::upgradeV2ToV3)
+            );
+        }
+
+        @Override
+        public CompoundTag saveFull(LegacyState self) {
+            return PiSchemaSupport.tagWithHeader(
+                    LEGACY_SCHEMA_ID,
+                    LEGACY_VERSION,
+                    PiSchemaFieldCodecs.writeField(LEGACY_VALUE_FIELD, self.value),
+                    PiSchemaFieldCodecs.writeField(LEGACY_LABEL_FIELD, self.label)
+            );
+        }
+
+        @Override
+        public void loadFull(LegacyState self, CompoundTag tag, PiDecodeContext context) {
+            CompoundTag payload = PiSchemaSupport.preparePayload(tag, context, this, PiSchemaPayloadKind.FULL);
+            if (payload == null) {
+                return;
+            }
+            self.value = PiSchemaFieldCodecs.readField(payload, LEGACY_VALUE_FIELD, context, self.value);
+            self.label = PiSchemaFieldCodecs.readField(payload, LEGACY_LABEL_FIELD, context, self.label);
+        }
+
+        @Override
+        public CompoundTag saveClientView(LegacyState self) {
+            return saveFull(self);
+        }
+
+        @Override
+        public CompoundTag writeDelta(LegacyState self, PiDirtySet dirtySet) {
+            CompoundTag tag = PiSchemaSupport.headerTag(LEGACY_SCHEMA_ID, LEGACY_VERSION);
+            if (dirtySet.contains(LEGACY_VALUE)) {
+                tag.put(LEGACY_VALUE_FIELD.key(), PiSchemaFieldCodecs.writeField(LEGACY_VALUE_FIELD, self.value).getSecond());
+            }
+            if (dirtySet.contains(LEGACY_LABEL)) {
+                tag.put(LEGACY_LABEL_FIELD.key(), PiSchemaFieldCodecs.writeField(LEGACY_LABEL_FIELD, self.label).getSecond());
+            }
+            return tag;
+        }
+
+        @Override
+        public void applyDelta(LegacyState self, CompoundTag tag, PiDecodeContext context) {
+            CompoundTag payload = PiSchemaSupport.preparePayload(tag, context, this, PiSchemaPayloadKind.DELTA);
+            if (payload == null) {
+                return;
+            }
+            if (payload.contains(LEGACY_VALUE_FIELD.key())) {
+                self.value = PiSchemaFieldCodecs.readField(payload, LEGACY_VALUE_FIELD, context, self.value);
+            }
+            if (payload.contains(LEGACY_LABEL_FIELD.key())) {
+                self.label = PiSchemaFieldCodecs.readField(payload, LEGACY_LABEL_FIELD, context, self.label);
+            }
+        }
+
+        private static CompoundTag upgradeV1ToV2(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {
+            CompoundTag upgraded = payload.copy();
+            if (upgraded.contains("count")) {
+                upgraded.put("value", upgraded.get("count"));
+                upgraded.remove("count");
+            }
+            upgraded.putInt(PiSchemaSupport.SCHEMA_VERSION_KEY, 2);
+            return upgraded;
+        }
+
+        private static CompoundTag upgradeV2ToV3(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {
+            CompoundTag upgraded = payload.copy();
+            if (kind == PiSchemaPayloadKind.FULL && !upgraded.contains("label")) {
+                upgraded.putString("label", "legacy");
+            }
+            upgraded.putInt(PiSchemaSupport.SCHEMA_VERSION_KEY, 3);
+            return upgraded;
+        }
+    }
+
+    private static final class ManualPersistedBinding implements PiStateBinding<ManualPersistedState> {
+        @Override
+        public ResourceLocation schemaId() {
+            return MANUAL_PERSISTED_SCHEMA_ID;
+        }
+
+        @Override
+        public int version() {
+            return MANUAL_PERSISTED_VERSION;
+        }
+
+        @Override
+        public Class<ManualPersistedState> stateType() {
+            return ManualPersistedState.class;
+        }
+
+        @Override
+        public ManualPersistedState newState() {
+            return new ManualPersistedState();
+        }
+
+        @Override
+        public List<PiFieldDescriptor> fields() {
+            return List.of(CHECKPOINTS_FIELD.descriptor(), MENU_PAGE_FIELD.descriptor());
+        }
+
+        @Override
+        public CompoundTag saveFull(ManualPersistedState self) {
+            return PiSchemaSupport.tagWithHeader(
+                    MANUAL_PERSISTED_SCHEMA_ID,
+                    MANUAL_PERSISTED_VERSION,
+                    PiSchemaFieldCodecs.writeField(CHECKPOINTS_FIELD, self.checkpoints),
+                    PiSchemaFieldCodecs.writeField(MENU_PAGE_FIELD, self.menuPage)
+            );
+        }
+
+        @Override
+        public void loadFull(ManualPersistedState self, CompoundTag tag, PiDecodeContext context) {
+            if (!PiSchemaSupport.validateHeader(tag, context, MANUAL_PERSISTED_SCHEMA_ID, MANUAL_PERSISTED_VERSION)) {
+                return;
+            }
+            self.checkpoints.clear();
+            self.checkpoints.addAll(PiSchemaFieldCodecs.readField(tag, CHECKPOINTS_FIELD, context, Set.of()));
+            self.menuPage = PiSchemaFieldCodecs.readField(tag, MENU_PAGE_FIELD, context, self.menuPage);
+        }
+
+        @Override
+        public CompoundTag saveClientView(ManualPersistedState self) {
+            return PiSchemaSupport.tagWithHeader(
+                    MANUAL_PERSISTED_SCHEMA_ID,
+                    MANUAL_PERSISTED_VERSION,
+                    PiSchemaFieldCodecs.writeField(CHECKPOINTS_FIELD, self.checkpoints)
+            );
+        }
+
+        @Override
+        public CompoundTag writeDelta(ManualPersistedState self, PiDirtySet dirtySet) {
+            CompoundTag tag = PiSchemaSupport.headerTag(MANUAL_PERSISTED_SCHEMA_ID, MANUAL_PERSISTED_VERSION);
+            if (dirtySet.contains(CHECKPOINTS)) {
+                tag.put(CHECKPOINTS_FIELD.key(), PiSchemaFieldCodecs.writeField(CHECKPOINTS_FIELD, self.checkpoints).getSecond());
+            }
+            if (dirtySet.contains(MENU_PAGE)) {
+                tag.put(MENU_PAGE_FIELD.key(), PiSchemaFieldCodecs.writeField(MENU_PAGE_FIELD, self.menuPage).getSecond());
+            }
+            return tag;
+        }
+
+        @Override
+        public void applyDelta(ManualPersistedState self, CompoundTag tag, PiDecodeContext context) {
+            if (!PiSchemaSupport.validateHeader(tag, context, MANUAL_PERSISTED_SCHEMA_ID, MANUAL_PERSISTED_VERSION)) {
+                return;
+            }
+            if (tag.contains(CHECKPOINTS_FIELD.key())) {
+                self.checkpoints.addAll(PiSchemaFieldCodecs.readField(tag, CHECKPOINTS_FIELD, context, Set.of()));
+            }
+            if (tag.contains(MENU_PAGE_FIELD.key())) {
+                self.menuPage = PiSchemaFieldCodecs.readField(tag, MENU_PAGE_FIELD, context, self.menuPage);
+            }
+        }
+    }
+
+    private static final class BrokenLegacyBinding extends LegacyBinding {
+        @Override
+        public List<PiSchemaMigration> migrations() {
+            return List.of(PiSchemaMigration.step(1, 2, LegacyBinding::upgradeV1ToV2));
         }
     }
 
@@ -178,9 +415,11 @@ class PiSchemaRuntimeTest {
         assertEquals(0L, restored.cost);
         assertEquals(2, context.result().issues().size());
         assertEquals("players", context.result().issues().get(0).path());
+        assertEquals(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, context.result().issues().get(0).code());
         assertEquals("missing field payload", context.result().issues().get(0).message());
         assertFalse(context.result().issues().get(0).fatal());
         assertEquals("cost", context.result().issues().get(1).path());
+        assertEquals(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, context.result().issues().get(1).code());
         assertEquals("missing field payload", context.result().issues().get(1).message());
         assertFalse(context.result().issues().get(1).fatal());
         assertFalse(context.result().hasFatal());
@@ -203,6 +442,7 @@ class PiSchemaRuntimeTest {
         assertEquals(9L, restored.cost);
         assertTrue(context.result().hasFatal());
         assertEquals("__pi_schema", context.result().issues().get(0).path());
+        assertEquals(PiDecodeIssueCode.SCHEMA_ID_MISMATCH, context.result().issues().get(0).code());
     }
 
     @Test
@@ -308,6 +548,188 @@ class PiSchemaRuntimeTest {
         assertEquals(2, context.result().issues().size());
         assertEquals("names", context.result().issues().get(0).path());
         assertEquals("counts", context.result().issues().get(1).path());
+    }
+
+    @Test
+    void loadFullUpgradesOlderPayloadThroughBindingMigrationChain() {
+        LegacyBinding binding = new LegacyBinding();
+        LegacyState restored = new LegacyState();
+        PiDecodeContext context = PiDecodeContext.strict();
+        CompoundTag legacyPayload = PiSchemaSupport.tagWithHeader(
+                LEGACY_SCHEMA_ID,
+                1,
+                PiSchemaSupport.putInt("count", 5)
+        );
+
+        binding.loadFull(restored, legacyPayload, context);
+
+        assertEquals(5, restored.value);
+        assertEquals("legacy", restored.label);
+        assertTrue(context.result().issues().isEmpty());
+    }
+
+    @Test
+    void applyDeltaUpgradesOlderPayloadWithoutInjectingFullDefaults() {
+        LegacyBinding binding = new LegacyBinding();
+        LegacyState restored = new LegacyState();
+        restored.value = 1;
+        restored.label = "keep";
+        PiDecodeContext context = PiDecodeContext.strict();
+        CompoundTag legacyDelta = PiSchemaSupport.tagWithHeader(
+                LEGACY_SCHEMA_ID,
+                1,
+                PiSchemaSupport.putInt("count", 9)
+        );
+
+        binding.applyDelta(restored, legacyDelta, context);
+
+        assertEquals(9, restored.value);
+        assertEquals("keep", restored.label);
+        assertTrue(context.result().issues().isEmpty());
+    }
+
+    @Test
+    void preparePayloadReportsFatalWhenMigrationChainIsIncomplete() {
+        BrokenLegacyBinding binding = new BrokenLegacyBinding();
+        PiDecodeContext context = PiDecodeContext.strict();
+        CompoundTag legacyPayload = PiSchemaSupport.tagWithHeader(
+                LEGACY_SCHEMA_ID,
+                1,
+                PiSchemaSupport.putInt("count", 7)
+        );
+
+        CompoundTag migrated = PiSchemaSupport.preparePayload(legacyPayload, context, binding, PiSchemaPayloadKind.FULL);
+
+        assertNull(migrated);
+        assertTrue(context.result().hasFatal());
+        assertEquals(PiSchemaSupport.SCHEMA_VERSION_KEY, context.result().issues().get(0).path());
+    }
+
+    @Test
+    void schemaSerializerThrowsStructuredDecodeException() {
+        PiSerializer<TestSchemaProvider.TestState> serializer = PiSchemaSerializers.forState(TestSchemaProvider.TestState.class);
+        CompoundTag tag = PiSchemaSupport.headerTag(TestSchemaProvider.SCHEMA_ID, TestSchemaProvider.SCHEMA_VERSION);
+
+        PiDecodeException exception = assertThrows(PiDecodeException.class, () -> serializer.nbtCodec().decode(tag));
+
+        assertEquals(TestSchemaProvider.SCHEMA_ID, exception.schemaId());
+        assertEquals(1, exception.result().issues().size());
+        assertEquals(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, exception.result().issues().get(0).code());
+        assertEquals("value -> missing int", exception.result().summary());
+        assertEquals("Failed to decode Pi schema test:schema_provider_state: value -> missing int", exception.getMessage());
+    }
+
+    @Test
+    void generatedBindingSaveAndLoadPersistedFieldsIgnoreNonPersistentFields() {
+        PiStateBinding<GeneratedProjectionState> binding = PiSchemas.require(GeneratedProjectionState.class);
+        GeneratedProjectionState state = new GeneratedProjectionState();
+        state.phase = 4;
+        state.rewardLabel = "boss";
+        state.menuPage = 7;
+
+        CompoundTag persisted = binding.savePersisted(state);
+
+        assertTrue(persisted.contains("phase"));
+        assertTrue(persisted.contains("reward_label"));
+        assertFalse(persisted.contains("menu_page"));
+
+        GeneratedProjectionState restored = new GeneratedProjectionState();
+        restored.menuPage = 99;
+        PiDecodeContext context = PiDecodeContext.strict();
+
+        binding.loadPersisted(restored, persisted, context);
+
+        assertEquals(4, restored.phase);
+        assertEquals("boss", restored.rewardLabel);
+        assertEquals(99, restored.menuPage);
+        assertTrue(context.result().issues().isEmpty());
+    }
+
+    @Test
+    void defaultLoadPersistedReplaysFullSemanticsForPersistentSubset() {
+        PiStateBinding<ManualPersistedState> binding = new ManualPersistedBinding();
+        ManualPersistedState source = new ManualPersistedState();
+        source.checkpoints.add("fresh");
+        source.menuPage = 3;
+
+        CompoundTag persisted = binding.savePersisted(source);
+
+        ManualPersistedState restored = new ManualPersistedState();
+        restored.checkpoints.add("stale");
+        restored.menuPage = 99;
+        PiDecodeContext context = PiDecodeContext.strict();
+
+        binding.loadPersisted(restored, persisted, context);
+
+        assertEquals(Set.of("fresh"), restored.checkpoints);
+        assertEquals(99, restored.menuPage);
+        assertTrue(context.result().issues().isEmpty());
+    }
+
+    @Test
+    void generatedBindingSupportsProjectionFilteredDeltaAndSnapshots() {
+        PiStateBinding<GeneratedProjectionState> binding = PiSchemas.require(GeneratedProjectionState.class);
+        GeneratedProjectionState state = new GeneratedProjectionState();
+        state.phase = 1;
+        state.rewardLabel = "iron";
+        state.menuPage = 2;
+
+        PiStateSnapshot baseline = binding.snapshot(state);
+        state.phase = 3;
+        state.menuPage = 5;
+
+        CompoundTag clientDelta = binding.writeDelta(
+                state,
+                binding.diff(state, baseline),
+                PiProjections.client()
+        );
+
+        assertTrue(clientDelta.contains("phase"));
+        assertFalse(clientDelta.contains("reward_label"));
+        assertFalse(clientDelta.contains("menu_page"));
+    }
+
+    @Test
+    void generatedNestedDeltaModeAppliesIntoExistingNestedStateInstance() {
+        PiStateBinding<GeneratedNestedDeltaState> binding = PiSchemas.require(GeneratedNestedDeltaState.class);
+        GeneratedNestedDeltaState state = new GeneratedNestedDeltaState();
+        state.child.value = 8;
+
+        GeneratedNestedDeltaState restored = new GeneratedNestedDeltaState();
+        GeneratedChildState originalChild = restored.child;
+        PiDirtySet dirty = new PiDirtySet().mark(fieldKey(binding, "child"));
+
+        binding.applyDelta(restored, binding.writeDelta(state, dirty), PiDecodeContext.strict());
+
+        assertTrue(originalChild == restored.child);
+        assertEquals(8, restored.child.value);
+    }
+
+    @Test
+    void generatedMergeDeltaModesPreserveExistingSetAndMapEntriesDuringDeltaApply() {
+        PiStateBinding<GeneratedMergeState> binding = PiSchemas.require(GeneratedMergeState.class);
+        GeneratedMergeState state = new GeneratedMergeState();
+        state.checkpoints.add(ResourceLocation.fromNamespaceAndPath("test", "new"));
+        state.weights.put("new", 2);
+
+        GeneratedMergeState restored = new GeneratedMergeState();
+        restored.checkpoints.add(ResourceLocation.fromNamespaceAndPath("test", "keep"));
+        restored.weights.put("keep", 1);
+
+        PiDirtySet dirty = new PiDirtySet()
+                .mark(fieldKey(binding, "checkpoints"))
+                .mark(fieldKey(binding, "weights"));
+
+        binding.applyDelta(restored, binding.writeDelta(state, dirty), PiDecodeContext.strict());
+
+        assertEquals(
+                List.of(
+                        ResourceLocation.fromNamespaceAndPath("test", "keep"),
+                        ResourceLocation.fromNamespaceAndPath("test", "new")
+                ),
+                List.copyOf(restored.checkpoints)
+        );
+        assertEquals(Map.of("keep", 1, "new", 2), restored.weights);
     }
 
     private static GeneratedComplexState staleGeneratedComplexState() {

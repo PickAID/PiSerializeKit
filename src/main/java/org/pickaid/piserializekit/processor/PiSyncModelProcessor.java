@@ -30,18 +30,28 @@ import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
 import javax.tools.Diagnostic;
 import javax.tools.StandardLocation;
+import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;
 import org.pickaid.piserializekit.api.schema.PiAfterDecode;
 import org.pickaid.piserializekit.api.schema.PiField;
 import org.pickaid.piserializekit.api.schema.PiFieldCodecProvider;
 import org.pickaid.piserializekit.api.schema.PiInferredFieldCodec;
+import org.pickaid.piserializekit.api.schema.PiSchemaUpgrade;
 import org.pickaid.piserializekit.api.schema.PiSyncModel;
 
 @SupportedAnnotationTypes({
         "org.pickaid.piserializekit.api.schema.PiSyncModel",
+        "org.pickaid.piserializekit.api.packet.PiPacket",
         "org.pickaid.pibrary.api.service.PiLivingService"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 public final class PiSyncModelProcessor extends AbstractProcessor {
+    private static final String PACKET_ANNOTATION = "org.pickaid.piserializekit.api.packet.PiPacket";
+    private static final String PACKET_NAMESPACE_ANNOTATION = "org.pickaid.piserializekit.api.packet.PiPacketNamespace";
+    private static final String PACKET_PROVIDER = "org.pickaid.piserializekit.api.packet.PiPacketProvider";
+    private static final String PACKET_REGISTRY = "org.pickaid.piserializekit.api.packet.PiPacketRegistry";
+    private static final String SERVER_PACKET = "org.pickaid.piserializekit.api.packet.PiServerPacket";
+    private static final String CLIENT_PACKET = "org.pickaid.piserializekit.api.packet.PiClientPacket";
+    private static final String BIDIRECTIONAL_PACKET = "org.pickaid.piserializekit.api.packet.PiBidirectionalPacket";
     private static final String LIVING_SERVICE_ANNOTATION = "org.pickaid.pibrary.api.service.PiLivingService";
     private static final String LIVING_SERVICE_CONTEXT = "org.pickaid.pibrary.api.service.PiLivingServiceContext";
     private static final String LIVING_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.api.service.PiLivingServiceDescriptor";
@@ -52,14 +62,28 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private static final String INFERRED_FIELD_CODEC = PiInferredFieldCodec.class.getName();
 
     private final Set<String> providerTypes = new LinkedHashSet<>();
+    private final Set<String> packetProviderTypes = new LinkedHashSet<>();
     private final Set<String> livingProviderTypes = new LinkedHashSet<>();
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         if (roundEnv.processingOver()) {
+            writePacketProviderServiceFile();
             writeProviderServiceFile();
             writeLivingProviderServiceFile();
             return false;
+        }
+        TypeElement packetAnnotation = processingEnv.getElementUtils().getTypeElement(PACKET_ANNOTATION);
+        if (packetAnnotation != null) {
+            for (Element element : roundEnv.getElementsAnnotatedWith(packetAnnotation)) {
+                if (element instanceof TypeElement typeElement) {
+                    PacketSpec packetSpec = resolvePacketSpec(typeElement);
+                    if (packetSpec != null) {
+                        generatePacketType(typeElement, packetSpec);
+                        generatePacketProviderType(typeElement);
+                    }
+                }
+            }
         }
         for (Element element : roundEnv.getElementsAnnotatedWith(PiSyncModel.class)) {
             if (element instanceof TypeElement typeElement) {
@@ -79,12 +103,16 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 if (afterDecode == null) {
                     continue;
                 }
+                MigrationSpec migrations = resolveSchemaMigrations(typeElement);
+                if (migrations == null) {
+                    continue;
+                }
                 List<FieldSpec> fields = collectFields(typeElement);
                 if (fields == null) {
                     continue;
                 }
                 generateFieldsType(typeElement, fields);
-                generateSchemaType(typeElement, fields, schemaIdentity, afterDecode);
+                generateSchemaType(typeElement, fields, schemaIdentity, afterDecode, migrations);
                 generateSchemaProviderType(typeElement);
             }
         }
@@ -141,6 +169,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
 
     private List<FieldSpec> collectFields(TypeElement typeElement) {
         List<FieldSpec> fields = new ArrayList<>();
+        Map<String, VariableElement> fieldIds = new LinkedHashMap<>();
         int index = 0;
         boolean valid = true;
         for (Element enclosedElement : typeElement.getEnclosedElements()) {
@@ -153,6 +182,17 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             }
             FieldSpec field = resolveFieldSpec((VariableElement) enclosedElement, piField, index);
             if (field == null) {
+                valid = false;
+                continue;
+            }
+            VariableElement duplicate = fieldIds.putIfAbsent(field.id(), (VariableElement) enclosedElement);
+            if (duplicate != null) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Duplicate @PiField.id \"" + field.id() + "\" in " + typeElement.getSimpleName()
+                                + " (already declared by field " + duplicate.getSimpleName() + ")",
+                        enclosedElement
+                );
                 valid = false;
                 continue;
             }
@@ -171,6 +211,10 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (accessStrategy == null) {
             return null;
         }
+        String deltaMode = annotation.delta().name();
+        if (!isSupportedDeltaMode(deltaMode, serializer.rawKind(), fieldElement.asType(), fieldElement)) {
+            return null;
+        }
         return new FieldSpec(
                 index,
                 constantName(fieldElement.getSimpleName().toString()),
@@ -178,11 +222,61 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 fieldElement.getSimpleName().toString(),
                 annotation.id(),
                 serializer.valueType(),
+                serializer.rawKind(),
                 annotation.sync().name(),
                 annotation.persist(),
                 serializer.serializerExpression(),
-                accessStrategy
+                accessStrategy,
+                deltaMode,
+                isNestedSyncModelType(fieldElement.asType())
         );
+    }
+
+    private boolean isSupportedDeltaMode(String deltaMode, RawKind rawKind, TypeMirror fieldType, Element fieldElement) {
+        return switch (deltaMode) {
+            case "REPLACE" -> true;
+            case "NESTED_UPDATE" -> {
+                if (!isNestedSyncModelType(fieldType) || rawKind != RawKind.SCALAR) {
+                    processingEnv.getMessager().printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "@PiField(delta = NESTED_UPDATE) requires a nested @PiSyncModel field",
+                            fieldElement
+                    );
+                    yield false;
+                }
+                yield true;
+            }
+            case "MERGE_SET" -> {
+                if (rawKind != RawKind.SET) {
+                    processingEnv.getMessager().printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "@PiField(delta = MERGE_SET) requires a Set field",
+                            fieldElement
+                    );
+                    yield false;
+                }
+                yield true;
+            }
+            case "MERGE_MAP" -> {
+                if (rawKind != RawKind.MAP) {
+                    processingEnv.getMessager().printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "@PiField(delta = MERGE_MAP) requires a Map field",
+                            fieldElement
+                    );
+                    yield false;
+                }
+                yield true;
+            }
+            default -> {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Unsupported Pi field delta mode " + deltaMode,
+                        fieldElement
+                );
+                yield false;
+            }
+        };
     }
 
     private ResolvedSerializer resolveSerializer(VariableElement fieldElement, PiField annotation) {
@@ -530,7 +624,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             TypeElement typeElement,
             List<FieldSpec> fields,
             SchemaIdentity schemaIdentity,
-            AfterDecodeSpec afterDecode
+            AfterDecodeSpec afterDecode,
+            MigrationSpec migrations
     ) {
         PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
         String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
@@ -549,9 +644,14 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("import net.minecraft.resources.ResourceLocation;\n");
                 writer.write("import java.util.List;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiDecodeContext;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiDirtyBits;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiDirtySet;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiFieldDeltaMode;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiFieldDescriptor;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiSchemaMigration;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiStateBinding;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiStateSnapshot;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiSyncScope;\n\n");
                 writer.write("import org.pickaid.piserializekit.api.service.PiSerializeServices;\n");
                 writer.write("import org.pickaid.piserializekit.api.service.PiSerializer;\n");
@@ -561,6 +661,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaFieldCodecs;\n");
                 writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaSerializers;\n");
                 writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;\n\n");
+                writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemas;\n\n");
                 writer.write("public final class " + simpleName + " {\n");
                 writer.write("    public static final String SCHEMA_ID = \"" + schemaId + "\";\n");
                 writer.write("    public static final int VERSION = " + version + ";\n");
@@ -568,8 +669,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 if (!fields.isEmpty()) {
                     writer.write("\n");
                     for (FieldSpec field : fields) {
-                        writer.write("    public static final PiFieldDescriptor " + field.constantName() + " = new PiFieldDescriptor(" +
-                                typeElement.getSimpleName() + "_PiFields." + field.constantName() + ", PiSyncScope." + field.syncScope() + ", " + field.persist() + ");\n");
+                        writer.write("    public static final PiFieldDescriptor " + field.constantName() + " = " + descriptorExpr(typeElement, field) + ";\n");
                     }
                     writer.write("    public static final List<PiFieldDescriptor> FIELDS = List.of(" + joinConstantNames(fields) + ");\n");
                     for (FieldSpec field : fields) {
@@ -581,6 +681,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                     writer.write("    public static final List<PiFieldDescriptor> FIELDS = List.of();\n");
                     writer.write("    public static final List<PiSchemaField<?>> SCHEMA_FIELDS = List.of();\n\n");
                 }
+                writeMigrationConstant(writer, typeElement, migrations);
                 writeBindingConstant(writer, typeElement, schemaIdentity);
                 writer.write("    public static CompoundTag saveFull(" + typeElement.getSimpleName() + " self) {\n");
                 writeTagWithHeader(writer, fields);
@@ -589,12 +690,50 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 List<FieldSpec> syncedFields = syncedFields(fields);
                 writeTagWithHeader(writer, syncedFields);
                 writer.write("    }\n\n");
+                writer.write("    public static CompoundTag savePersisted(" + typeElement.getSimpleName() + " self) {\n");
+                writeTagWithHeader(writer, persistedFields(fields));
+                writer.write("    }\n\n");
+                writer.write("    public static PiStateSnapshot snapshot(" + typeElement.getSimpleName() + " self) {\n");
+                writer.write("        return new PiStateSnapshot(BINDING.schemaId(), VERSION, new net.minecraft.nbt.Tag[]{\n");
+                for (int i = 0; i < fields.size(); i++) {
+                    FieldSpec field = fields.get(i);
+                    writer.write("                PiSchemaFieldCodecs.writeField(" + field.schemaConstantName() + ", self." + field.fieldName() + ").getSecond()");
+                    writer.write(i + 1 < fields.size() ? ",\n" : "\n");
+                }
+                writer.write("        });\n");
+                writer.write("    }\n\n");
+                writer.write("    public static PiDirtyBits diff(" + typeElement.getSimpleName() + " self, PiStateSnapshot snapshot) {\n");
+                writer.write("        if (!snapshot.matches(BINDING)) {\n");
+                writer.write("            throw new IllegalArgumentException(\"PiStateSnapshot does not match binding \" + BINDING.schemaId());\n");
+                writer.write("        }\n");
+                writer.write("        PiDirtyBits bits = new PiDirtyBits();\n");
+                for (FieldSpec field : fields) {
+                    writer.write("        net.minecraft.nbt.Tag __pi_" + field.fieldName() + "Current = PiSchemaFieldCodecs.writeField(" + field.schemaConstantName() + ", self." + field.fieldName() + ").getSecond();\n");
+                    writer.write("        if (!snapshot.sameField(" + field.index() + ", __pi_" + field.fieldName() + "Current)) {\n");
+                    writer.write("            bits.mark(" + typeElement.getSimpleName() + "_PiFields." + field.constantName() + ");\n");
+                    writer.write("        }\n");
+                }
+                writer.write("        return bits;\n");
+                writer.write("    }\n\n");
                 writer.write("    public static void loadFull(" + typeElement.getSimpleName() + " self, CompoundTag tag, PiDecodeContext context) {\n");
-                writer.write("        if (!PiSchemaSupport.validateHeader(tag, context, SCHEMA_ID, VERSION)) {\n");
+                writer.write("        CompoundTag __pi_payload = PiSchemaSupport.preparePayload(tag, context, BINDING, PiSchemaPayloadKind.FULL);\n");
+                writer.write("        if (__pi_payload == null) {\n");
                 writer.write("            return;\n");
                 writer.write("        }\n");
                 for (FieldSpec field : fields) {
-                    writer.write(loadStmt(field));
+                    writer.write(loadStmt(field, "__pi_payload", "PiSchemaPayloadKind.FULL"));
+                }
+                if (afterDecode.present()) {
+                    writer.write("        self." + afterDecode.methodName() + "();\n");
+                }
+                writer.write("    }\n\n");
+                writer.write("    public static void loadPersisted(" + typeElement.getSimpleName() + " self, CompoundTag tag, PiDecodeContext context) {\n");
+                writer.write("        CompoundTag __pi_payload = PiSchemaSupport.preparePayload(tag, context, BINDING, PiSchemaPayloadKind.PERSISTED);\n");
+                writer.write("        if (__pi_payload == null) {\n");
+                writer.write("            return;\n");
+                writer.write("        }\n");
+                for (FieldSpec field : persistedFields(fields)) {
+                    writer.write(loadStmt(field, "__pi_payload", "PiSchemaPayloadKind.PERSISTED"));
                 }
                 if (afterDecode.present()) {
                     writer.write("        self." + afterDecode.methodName() + "();\n");
@@ -610,12 +749,13 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("        return tag;\n");
                 writer.write("    }\n\n");
                 writer.write("    public static void applyDelta(" + typeElement.getSimpleName() + " self, CompoundTag tag, PiDecodeContext context) {\n");
-                writer.write("        if (!PiSchemaSupport.validateHeader(tag, context, SCHEMA_ID, VERSION)) {\n");
+                writer.write("        CompoundTag __pi_payload = PiSchemaSupport.preparePayload(tag, context, BINDING, PiSchemaPayloadKind.DELTA);\n");
+                writer.write("        if (__pi_payload == null) {\n");
                 writer.write("            return;\n");
                 writer.write("        }\n");
                 for (FieldSpec field : fields) {
-                    writer.write("        if (tag.contains(" + field.schemaConstantName() + ".key())) {\n");
-                    writer.write(applyDeltaStmt(field));
+                    writer.write("        if (__pi_payload.contains(" + field.schemaConstantName() + ".key())) {\n");
+                    writer.write(applyDeltaStmt(field, "__pi_payload", "PiSchemaPayloadKind.DELTA"));
                     writer.write("        }\n");
                 }
                 if (afterDecode.present()) {
@@ -658,6 +798,443 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+        }
+    }
+
+    private PacketSpec resolvePacketSpec(TypeElement typeElement) {
+        AnnotationMirror mirror = findAnnotation(typeElement, PACKET_ANNOTATION);
+        if (mirror == null) {
+            return null;
+        }
+        Map<String, AnnotationValue> values = annotationValues(mirror);
+        PacketIdentity packetIdentity = resolvePacketIdentity(
+                typeElement,
+                stringValue(values, "id"),
+                stringValue(values, "namespace"),
+                stringValue(values, "path")
+        );
+        if (packetIdentity == null) {
+            return null;
+        }
+        PacketDirectionSpec direction = resolvePacketDirection(typeElement);
+        if (direction == null) {
+            return null;
+        }
+        Integer version = intValue(values, "version");
+        int packetVersion = version == null ? 1 : version;
+        MigrationSpec migrations = resolvePacketMigrations(typeElement, packetVersion);
+        if (migrations == null) {
+            return null;
+        }
+        List<FieldSpec> fields = collectFields(typeElement);
+        if (fields == null) {
+            return null;
+        }
+        if (!hasCompatiblePacketConstructor(typeElement, fields)) {
+            return null;
+        }
+        return new PacketSpec(packetIdentity.namespace(), packetIdentity.path(), packetVersion, direction, fields, migrations);
+    }
+
+    private PacketIdentity resolvePacketIdentity(
+            TypeElement typeElement,
+            String explicitId,
+            String explicitNamespace,
+            String explicitPath
+    ) {
+        boolean hasExplicitId = explicitId != null && !explicitId.isBlank();
+        boolean hasExplicitNamespace = explicitNamespace != null && !explicitNamespace.isBlank();
+        boolean hasExplicitPath = explicitPath != null && !explicitPath.isBlank();
+        if (hasExplicitId) {
+            if (hasExplicitNamespace || hasExplicitPath) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiPacket.id cannot be combined with @PiPacket.namespace or @PiPacket.path",
+                        typeElement
+                );
+                return null;
+            }
+            SchemaIdentity identity = resolveExplicitResourceLocation(
+                    explicitId,
+                    typeElement,
+                    "@PiPacket.id must be a namespace:path resource location"
+            );
+            return identity == null ? null : new PacketIdentity(identity.namespace(), identity.path());
+        }
+        String namespace = resolvePacketNamespace(typeElement, explicitNamespace);
+        if (namespace == null) {
+            return null;
+        }
+        String path = resolvePacketPath(typeElement, explicitPath);
+        if (path == null) {
+            return null;
+        }
+        return new PacketIdentity(namespace, path);
+    }
+
+    private String resolvePacketNamespace(TypeElement typeElement, String explicitNamespace) {
+        if (explicitNamespace != null && !explicitNamespace.isBlank()) {
+            if (!isValidNamespace(explicitNamespace)) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiPacket.namespace must be a valid resource namespace",
+                        typeElement
+                );
+                return null;
+            }
+            return explicitNamespace;
+        }
+        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
+        AnnotationMirror packageMirror = findAnnotation(packageElement, PACKET_NAMESPACE_ANNOTATION);
+        if (packageMirror == null) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiPacket requires a namespace via @PiPacket(namespace = ...), @PiPacket(id = ...), or package-info @PiPacketNamespace(...)",
+                    typeElement
+            );
+            return null;
+        }
+        String namespace = stringValue(annotationValues(packageMirror), "value");
+        if (namespace == null || namespace.isBlank() || !isValidNamespace(namespace)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiPacketNamespace value must be a valid resource namespace",
+                    packageElement
+            );
+            return null;
+        }
+        return namespace;
+    }
+
+    private String resolvePacketPath(TypeElement typeElement, String explicitPath) {
+        String path = explicitPath == null || explicitPath.isBlank()
+                ? inferPacketPath(typeElement.getSimpleName().toString())
+                : explicitPath;
+        if (path.isEmpty() || !isValidPath(path)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiPacket.path must resolve to a valid resource path",
+                    typeElement
+            );
+            return null;
+        }
+        return path;
+    }
+
+    private String inferPacketPath(String simpleName) {
+        String trimmed = simpleName.replaceFirst("(Packet|Request|Payload|ToClient|ToServer)$", "");
+        if (trimmed.isEmpty()) {
+            trimmed = simpleName;
+        }
+        return camelToSnake(trimmed);
+    }
+
+    private String camelToSnake(String value) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char current = value.charAt(i);
+            if (Character.isUpperCase(current)) {
+                boolean needsSeparator = i > 0
+                        && (Character.isLowerCase(value.charAt(i - 1))
+                        || Character.isDigit(value.charAt(i - 1))
+                        || i + 1 < value.length() && Character.isLowerCase(value.charAt(i + 1)));
+                if (needsSeparator) {
+                    builder.append('_');
+                }
+                builder.append(Character.toLowerCase(current));
+            } else {
+                builder.append(current);
+            }
+        }
+        return builder.toString();
+    }
+
+    private PacketDirectionSpec resolvePacketDirection(TypeElement typeElement) {
+        if (isAssignableTo(typeElement, SERVER_PACKET)) {
+            return new PacketDirectionSpec("SERVERBOUND", "PiServerPacketContext");
+        }
+        if (isAssignableTo(typeElement, CLIENT_PACKET)) {
+            return new PacketDirectionSpec("CLIENTBOUND", "PiClientPacketContext");
+        }
+        if (isAssignableTo(typeElement, BIDIRECTIONAL_PACKET)) {
+            return new PacketDirectionSpec("BIDIRECTIONAL", "PiPacketContext");
+        }
+        processingEnv.getMessager().printMessage(
+                Diagnostic.Kind.ERROR,
+                "@PiPacket types must extend PiServerPacket, PiClientPacket, or PiBidirectionalPacket",
+                typeElement
+        );
+        return null;
+    }
+
+    private boolean isAssignableTo(TypeElement typeElement, String qualifiedName) {
+        TypeElement target = processingEnv.getElementUtils().getTypeElement(qualifiedName);
+        return target != null && processingEnv.getTypeUtils().isAssignable(typeElement.asType(), target.asType());
+    }
+
+    private boolean hasCompatiblePacketConstructor(TypeElement typeElement, List<FieldSpec> fields) {
+        boolean hasExplicitConstructor = false;
+        for (Element enclosedElement : typeElement.getEnclosedElements()) {
+            if (enclosedElement.getKind() != ElementKind.CONSTRUCTOR) {
+                continue;
+            }
+            hasExplicitConstructor = true;
+            ExecutableElement constructor = (ExecutableElement) enclosedElement;
+            if (constructor.getModifiers().contains(Modifier.PRIVATE) || constructor.getParameters().size() != fields.size()) {
+                continue;
+            }
+            boolean compatible = true;
+            for (int i = 0; i < fields.size(); i++) {
+                String parameterType = boxedTypeName(constructor.getParameters().get(i).asType());
+                if (!fields.get(i).valueType().equals(parameterType)) {
+                    compatible = false;
+                    break;
+                }
+            }
+            if (compatible) {
+                return true;
+            }
+        }
+        if (!hasExplicitConstructor && fields.isEmpty()) {
+            return true;
+        }
+        processingEnv.getMessager().printMessage(
+                Diagnostic.Kind.ERROR,
+                "@PiPacket types must declare an accessible constructor matching @PiField order",
+                typeElement
+        );
+        return false;
+    }
+
+    private MigrationSpec resolvePacketMigrations(TypeElement typeElement, int targetVersion) {
+        List<MigrationStepSpec> steps = new ArrayList<>();
+        Set<Integer> fromVersions = new LinkedHashSet<>();
+        for (Element enclosedElement : typeElement.getEnclosedElements()) {
+            if (enclosedElement.getKind() != ElementKind.METHOD || enclosedElement.getAnnotation(PiPacketUpgrade.class) == null) {
+                continue;
+            }
+            ExecutableElement method = (ExecutableElement) enclosedElement;
+            PiPacketUpgrade annotation = method.getAnnotation(PiPacketUpgrade.class);
+            if (!method.getModifiers().contains(Modifier.STATIC)
+                    || method.getModifiers().contains(Modifier.PRIVATE)
+                    || method.getParameters().size() != 3
+                    || !"net.minecraft.nbt.CompoundTag".equals(method.getParameters().get(0).asType().toString())
+                    || !"org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind".equals(method.getParameters().get(1).asType().toString())
+                    || !"org.pickaid.piserializekit.api.schema.PiDecodeContext".equals(method.getParameters().get(2).asType().toString())
+                    || !"net.minecraft.nbt.CompoundTag".equals(method.getReturnType().toString())) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiPacketUpgrade methods must be static, non-private, return CompoundTag, and accept (CompoundTag, PiSchemaPayloadKind, PiDecodeContext)",
+                        method
+                );
+                return null;
+            }
+            if (annotation.from() < 1 || annotation.to() <= annotation.from()) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiPacketUpgrade requires to > from >= 1",
+                        method
+                );
+                return null;
+            }
+            if (!fromVersions.add(annotation.from())) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiPacketUpgrade allows only one migration step per source version",
+                        method
+                );
+                return null;
+            }
+            steps.add(new MigrationStepSpec(annotation.from(), annotation.to(), method.getSimpleName().toString()));
+        }
+        steps.sort((left, right) -> Integer.compare(left.fromVersion(), right.fromVersion()));
+        if (!validateMigrationReachability(typeElement, steps, targetVersion, "@PiPacketUpgrade")) {
+            return null;
+        }
+        return new MigrationSpec(List.copyOf(steps));
+    }
+
+    private void generatePacketType(TypeElement typeElement, PacketSpec packetSpec) {
+        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
+        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
+        String simpleName = typeElement.getSimpleName() + "_PiPacket";
+        String typeName = typeElement.getSimpleName().toString();
+        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        try {
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, typeElement);
+            try (Writer writer = file.openWriter()) {
+                if (!packageName.isEmpty()) {
+                    writer.write("package " + packageName + ";\n\n");
+                }
+                writer.write("import java.util.List;\n");
+                writer.write("import net.minecraft.nbt.CompoundTag;\n");
+                writer.write("import net.minecraft.network.FriendlyByteBuf;\n");
+                writer.write("import net.minecraft.resources.ResourceLocation;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.PiClientPacketContext;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.PiPacketBinding;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.PiPacketCodec;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.PiPacketContext;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.PiPacketDecodeException;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.PiPacketDirection;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.PiServerPacketContext;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiDecodeContext;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiFieldKey;\n");
+                writer.write("import org.pickaid.piserializekit.api.schema.PiSchemaMigration;\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializeServices;\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializer;\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializerType;\n");
+                writer.write("import org.pickaid.piserializekit.api.service.PiSerializers;\n");
+                writer.write("import org.pickaid.piserializekit.runtime.packet.PiPacketSupport;\n");
+                writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaFieldCodecs;\n");
+                writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaSerializers;\n\n");
+                writer.write("import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;\n\n");
+                writer.write("public final class " + simpleName + " {\n");
+                writer.write("    public static final int VERSION = " + packetSpec.version() + ";\n");
+                writer.write("    public static final ResourceLocation PACKET_ID = ResourceLocation.fromNamespaceAndPath(\"" + packetSpec.namespace() + "\", \"" + packetSpec.path() + "\");\n");
+                if (!packetSpec.fields().isEmpty()) {
+                    writer.write("\n");
+                    for (FieldSpec field : packetSpec.fields()) {
+                        writer.write("    public static final PiFieldKey " + field.constantName() + " = new PiFieldKey(" + field.index() + ", \"" + field.id() + "\");\n");
+                    }
+                    writer.write("    public static final List<PiFieldKey> FIELDS = List.of(" + joinConstantNames(packetSpec.fields()) + ");\n");
+                    for (FieldSpec field : packetSpec.fields()) {
+                        writer.write("    public static final PiSerializer<" + field.valueType() + "> " + packetSerializerConstantName(field)
+                                + " = " + field.serializerExpression() + ";\n");
+                    }
+                } else {
+                    writer.write("    public static final List<PiFieldKey> FIELDS = List.of();\n\n");
+                }
+                writer.write("\n");
+                writeMigrationConstant(writer, typeElement, packetSpec.migrations());
+                writer.write("    public static final PiPacketCodec<" + typeName + "> CODEC = new PiPacketCodec<>() {\n");
+                writer.write("        @Override\n");
+                writer.write("        public void write(FriendlyByteBuf buffer, " + typeName + " value) {\n");
+                writer.write("            buffer.writeVarInt(VERSION);\n");
+                for (FieldSpec field : packetSpec.fields()) {
+                    writer.write("            " + packetSerializerConstantName(field) + ".packetCodec().write(buffer, value." + field.fieldName() + ");\n");
+                }
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public " + typeName + " read(FriendlyByteBuf buffer, PiDecodeContext context) {\n");
+                writer.write("            int incomingVersion = PiPacketSupport.safeRead(context, PiSchemaSupport.SCHEMA_VERSION_KEY, buffer::readVarInt, VERSION);\n");
+                writer.write("            boolean legacy = incomingVersion < VERSION;\n");
+                writer.write("            CompoundTag payload = new CompoundTag();\n");
+                writer.write("            payload.putInt(PiSchemaSupport.SCHEMA_VERSION_KEY, incomingVersion);\n");
+                for (FieldSpec field : packetSpec.fields()) {
+                    writer.write("            " + field.valueType() + " " + packetIncomingValueName(field)
+                            + " = PiPacketSupport.readIncomingField(buffer, " + field.constantName() + ".id(), " + packetSerializerConstantName(field)
+                            + ", context, legacy, " + packetFallbackExpr(field) + ");\n");
+                    writer.write("            PiPacketSupport.writePayloadField(payload, " + field.constantName() + ".id(), " + packetSerializerConstantName(field)
+                            + ", " + packetIncomingValueName(field) + ", context);\n");
+                }
+                writer.write("            CompoundTag upgradedPayload = PiPacketSupport.upgradePacketPayload(PACKET_ID.toString(), incomingVersion, VERSION, payload, MIGRATIONS, context);\n");
+                writer.write("            CompoundTag resolvedPayload = upgradedPayload == null ? new CompoundTag() : upgradedPayload;\n");
+                for (FieldSpec field : packetSpec.fields()) {
+                    writer.write("            " + field.valueType() + " " + packetDecodedValueName(field)
+                            + " = PiSchemaFieldCodecs.decode(resolvedPayload, " + field.constantName() + ".id(), " + packetSerializerConstantName(field)
+                            + ", context.child(" + field.constantName() + ".id()), " + packetFallbackExpr(field) + ");\n");
+                }
+                writer.write("            return new " + typeName + "(" + joinDecodedValueNames(packetSpec.fields()) + ");\n");
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public " + typeName + " read(FriendlyByteBuf buffer) {\n");
+                writer.write("            PiDecodeContext context = PiDecodeContext.strict();\n");
+                writer.write("            " + typeName + " packet = read(buffer, context);\n");
+                writer.write("            if (context.result().hasIssues()) {\n");
+                writer.write("                throw new PiPacketDecodeException(PACKET_ID, context.result());\n");
+                writer.write("            }\n");
+                writer.write("            return packet;\n");
+                writer.write("        }\n");
+                writer.write("    };\n\n");
+                writer.write("    public static final PiPacketBinding<" + typeName + ", " + packetSpec.direction().contextType()
+                        + "> BINDING = new PiPacketBinding<>() {\n");
+                writer.write("        @Override\n");
+                writer.write("        public ResourceLocation packetId() {\n");
+                writer.write("            return PACKET_ID;\n");
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public int version() {\n");
+                writer.write("            return VERSION;\n");
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public PiPacketDirection direction() {\n");
+                writer.write("            return PiPacketDirection." + packetSpec.direction().directionName() + ";\n");
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public Class<" + typeName + "> packetType() {\n");
+                writer.write("            return " + typeName + ".class;\n");
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public List<PiFieldKey> fields() {\n");
+                writer.write("            return FIELDS;\n");
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public PiPacketCodec<" + typeName + "> codec() {\n");
+                writer.write("            return CODEC;\n");
+                writer.write("        }\n\n");
+                writer.write("        @Override\n");
+                writer.write("        public void dispatch(" + typeName + " packet, " + packetSpec.direction().contextType() + " context) {\n");
+                writer.write("            packet.handle(context);\n");
+                writer.write("        }\n");
+                writer.write("    };\n\n");
+                writer.write("    private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type) {\n");
+                writer.write("        return PiSerializeServices.require().lookup(type)\n");
+                writer.write("                .orElseThrow(() -> new IllegalStateException(\"Missing Pi serializer for \" + type.id() + \" / \" + type.javaType().getName()));\n");
+                writer.write("    }\n\n");
+                writer.write("    private " + simpleName + "() {\n");
+                writer.write("    }\n");
+                writer.write("}\n");
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+        }
+    }
+
+    private void generatePacketProviderType(TypeElement typeElement) {
+        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
+        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
+        String simpleName = typeElement.getSimpleName() + "_PiPacketProvider";
+        String packetSimpleName = typeElement.getSimpleName() + "_PiPacket";
+        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        packetProviderTypes.add(qualifiedName);
+        try {
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, typeElement);
+            try (Writer writer = file.openWriter()) {
+                if (!packageName.isEmpty()) {
+                    writer.write("package " + packageName + ";\n\n");
+                }
+                writer.write("import " + PACKET_PROVIDER + ";\n");
+                writer.write("import " + PACKET_REGISTRY + ";\n\n");
+                writer.write("public final class " + simpleName + " implements PiPacketProvider {\n");
+                writer.write("    @Override\n");
+                writer.write("    public void register(PiPacketRegistry registry) {\n");
+                writer.write("        registry.register(" + typeElement.getSimpleName() + ".class, " + packetSimpleName + ".BINDING);\n");
+                writer.write("    }\n");
+                writer.write("}\n");
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+        }
+    }
+
+    private void writePacketProviderServiceFile() {
+        if (packetProviderTypes.isEmpty()) {
+            return;
+        }
+        try {
+            FileObject file = processingEnv.getFiler().createResource(
+                    StandardLocation.CLASS_OUTPUT,
+                    "",
+                    "META-INF/services/" + PACKET_PROVIDER
+            );
+            try (Writer writer = file.openWriter()) {
+                for (String providerType : packetProviderTypes) {
+                    writer.write(providerType);
+                    writer.write("\n");
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to generate Pi packet provider service file", e);
         }
     }
 
@@ -810,6 +1387,21 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         }
     }
 
+    private void writeMigrationConstant(Writer writer, TypeElement typeElement, MigrationSpec migrations) throws IOException {
+        String typeName = typeElement.getSimpleName().toString();
+        if (!migrations.present()) {
+            writer.write("    public static final List<PiSchemaMigration> MIGRATIONS = List.of();\n\n");
+            return;
+        }
+        writer.write("    public static final List<PiSchemaMigration> MIGRATIONS = List.of(\n");
+        for (int i = 0; i < migrations.steps().size(); i++) {
+            MigrationStepSpec step = migrations.steps().get(i);
+            writer.write("            PiSchemaMigration.step(" + step.fromVersion() + ", " + step.toVersion() + ", " + typeName + "::" + step.methodName() + ")");
+            writer.write(i + 1 < migrations.steps().size() ? ",\n" : "\n");
+        }
+        writer.write("    );\n\n");
+    }
+
     private void writeBindingConstant(Writer writer, TypeElement typeElement, SchemaIdentity schemaIdentity) throws IOException {
         String typeName = typeElement.getSimpleName().toString();
         writer.write("    public static final PiStateBinding<" + typeName + "> BINDING = new PiStateBinding<>() {\n");
@@ -834,6 +1426,18 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         writer.write("            return FIELDS;\n");
         writer.write("        }\n\n");
         writer.write("        @Override\n");
+        writer.write("        public List<PiSchemaMigration> migrations() {\n");
+        writer.write("            return MIGRATIONS;\n");
+        writer.write("        }\n\n");
+        writer.write("        @Override\n");
+        writer.write("        public PiStateSnapshot snapshot(" + typeName + " self) {\n");
+        writer.write("            return " + typeName + "_PiSchema.snapshot(self);\n");
+        writer.write("        }\n\n");
+        writer.write("        @Override\n");
+        writer.write("        public PiDirtyBits diff(" + typeName + " self, PiStateSnapshot snapshot) {\n");
+        writer.write("            return " + typeName + "_PiSchema.diff(self, snapshot);\n");
+        writer.write("        }\n\n");
+        writer.write("        @Override\n");
         writer.write("        public CompoundTag saveFull(" + typeName + " self) {\n");
         writer.write("            return " + typeName + "_PiSchema.saveFull(self);\n");
         writer.write("        }\n\n");
@@ -844,6 +1448,14 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         writer.write("        @Override\n");
         writer.write("        public CompoundTag saveClientView(" + typeName + " self) {\n");
         writer.write("            return " + typeName + "_PiSchema.saveClientView(self);\n");
+        writer.write("        }\n\n");
+        writer.write("        @Override\n");
+        writer.write("        public CompoundTag savePersisted(" + typeName + " self) {\n");
+        writer.write("            return " + typeName + "_PiSchema.savePersisted(self);\n");
+        writer.write("        }\n\n");
+        writer.write("        @Override\n");
+        writer.write("        public void loadPersisted(" + typeName + " self, CompoundTag tag, PiDecodeContext context) {\n");
+        writer.write("            " + typeName + "_PiSchema.loadPersisted(self, tag, context);\n");
         writer.write("        }\n\n");
         writer.write("        @Override\n");
         writer.write("        public CompoundTag writeDelta(" + typeName + " self, PiDirtySet dirtySet) {\n");
@@ -861,13 +1473,20 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (annotation == null) {
             return null;
         }
-        String id = annotation.id();
+        return resolveExplicitResourceLocation(
+                annotation.id(),
+                typeElement,
+                "@PiSyncModel.id must be a namespace:path resource location"
+        );
+    }
+
+    private SchemaIdentity resolveExplicitResourceLocation(String id, Element element, String errorMessage) {
         int delimiter = id.indexOf(':');
         if (delimiter <= 0 || delimiter != id.lastIndexOf(':') || delimiter == id.length() - 1) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiSyncModel.id must be a namespace:path resource location",
-                    typeElement
+                    errorMessage,
+                    element
             );
             return null;
         }
@@ -876,8 +1495,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (!isValidNamespace(namespace) || !isValidPath(path)) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiSyncModel.id must be a namespace:path resource location",
-                    typeElement
+                    errorMessage,
+                    element
             );
             return null;
         }
@@ -913,6 +1532,103 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             hook = new AfterDecodeSpec(method.getSimpleName().toString());
         }
         return hook;
+    }
+
+    private MigrationSpec resolveSchemaMigrations(TypeElement typeElement) {
+        List<MigrationStepSpec> steps = new ArrayList<>();
+        Set<Integer> fromVersions = new LinkedHashSet<>();
+        int targetVersion = typeElement.getAnnotation(PiSyncModel.class).version();
+        for (Element enclosedElement : typeElement.getEnclosedElements()) {
+            if (enclosedElement.getKind() != ElementKind.METHOD || enclosedElement.getAnnotation(PiSchemaUpgrade.class) == null) {
+                continue;
+            }
+            ExecutableElement method = (ExecutableElement) enclosedElement;
+            PiSchemaUpgrade annotation = method.getAnnotation(PiSchemaUpgrade.class);
+            if (!method.getModifiers().contains(Modifier.STATIC)
+                    || method.getModifiers().contains(Modifier.PRIVATE)
+                    || method.getParameters().size() != 3
+                    || !"net.minecraft.nbt.CompoundTag".equals(method.getParameters().get(0).asType().toString())
+                    || !"org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind".equals(method.getParameters().get(1).asType().toString())
+                    || !"org.pickaid.piserializekit.api.schema.PiDecodeContext".equals(method.getParameters().get(2).asType().toString())
+                    || !"net.minecraft.nbt.CompoundTag".equals(method.getReturnType().toString())) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiSchemaUpgrade methods must be static, non-private, return CompoundTag, and accept (CompoundTag, PiSchemaPayloadKind, PiDecodeContext)",
+                        method
+                );
+                return null;
+            }
+            if (annotation.from() < 1 || annotation.to() <= annotation.from()) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiSchemaUpgrade requires to > from >= 1",
+                        method
+                );
+                return null;
+            }
+            if (!fromVersions.add(annotation.from())) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@PiSchemaUpgrade allows only one migration step per source version",
+                        method
+                );
+                return null;
+            }
+            steps.add(new MigrationStepSpec(annotation.from(), annotation.to(), method.getSimpleName().toString()));
+        }
+        steps.sort((left, right) -> Integer.compare(left.fromVersion(), right.fromVersion()));
+        if (!validateMigrationReachability(typeElement, steps, targetVersion, "@PiSchemaUpgrade")) {
+            return null;
+        }
+        return new MigrationSpec(List.copyOf(steps));
+    }
+
+    private boolean validateMigrationReachability(
+            TypeElement typeElement,
+            List<MigrationStepSpec> steps,
+            int targetVersion,
+            String annotationName
+    ) {
+        if (steps.isEmpty()) {
+            return true;
+        }
+        Map<Integer, MigrationStepSpec> indexed = new LinkedHashMap<>();
+        for (MigrationStepSpec step : steps) {
+            if (step.fromVersion() >= targetVersion) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        annotationName + ".from must be lower than declared schema version " + targetVersion,
+                        typeElement
+                );
+                return false;
+            }
+            if (step.toVersion() > targetVersion) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        annotationName + ".to cannot exceed declared schema version " + targetVersion,
+                        typeElement
+                );
+                return false;
+            }
+            indexed.put(step.fromVersion(), step);
+        }
+        for (int startVersion = 1; startVersion < targetVersion; startVersion++) {
+            int currentVersion = startVersion;
+            while (currentVersion < targetVersion) {
+                MigrationStepSpec step = indexed.get(currentVersion);
+                if (step == null) {
+                    processingEnv.getMessager().printMessage(
+                            Diagnostic.Kind.ERROR,
+                            annotationName + " chain must define a migration path from version "
+                                    + startVersion + " to " + targetVersion,
+                            typeElement
+                    );
+                    return false;
+                }
+                currentVersion = step.toVersion();
+            }
+        }
+        return true;
     }
 
     private TypeMirror serializerType(Element fieldElement) {
@@ -991,6 +1707,16 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         return synced;
     }
 
+    private List<FieldSpec> persistedFields(List<FieldSpec> fields) {
+        List<FieldSpec> persisted = new ArrayList<>();
+        for (FieldSpec field : fields) {
+            if (field.persist()) {
+                persisted.add(field);
+            }
+        }
+        return persisted;
+    }
+
     private boolean isClientVisibleScope(String syncScope) {
         return switch (syncScope) {
             case "CHUNK", "TRACKING", "GLOBAL" -> true;
@@ -1019,8 +1745,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         return "PiSchemaFieldCodecs.writeField(" + field.schemaConstantName() + ", self." + field.fieldName() + ")";
     }
 
-    private String loadStmt(FieldSpec field) {
-        return readStmt(field, "        ");
+    private String loadStmt(FieldSpec field, String payloadName, String payloadKindExpression) {
+        return readStmt(field, "        ", payloadName, payloadKindExpression, false);
     }
 
     private String writeDeltaStmt(FieldSpec field) {
@@ -1028,12 +1754,17 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 field.schemaConstantName() + ", self." + field.fieldName() + ").getSecond());\n";
     }
 
-    private String applyDeltaStmt(FieldSpec field) {
-        return readStmt(field, "            ");
+    private String applyDeltaStmt(FieldSpec field, String payloadName, String payloadKindExpression) {
+        return readStmt(field, "            ", payloadName, payloadKindExpression, true);
     }
 
-    private String readStmt(FieldSpec field, String indent) {
-        String readCall = "PiSchemaFieldCodecs.readField(tag, " + field.schemaConstantName() + ", context, " + fallbackExpr(field) + ")";
+    private String readStmt(FieldSpec field, String indent, String payloadName, String payloadKindExpression, boolean deltaApply) {
+        if (field.nestedSyncModel() && field.deltaMode().equals("NESTED_UPDATE")) {
+            return indent + "self." + field.fieldName() + " = PiSchemaFieldCodecs.readNestedField(" + payloadName + ", " +
+                    field.schemaConstantName() + ".key(), PiSchemas.require(" + field.valueType() + ".class), context, self." +
+                    field.fieldName() + ", " + payloadKindExpression + ");\n";
+        }
+        String readCall = "PiSchemaFieldCodecs.readField(" + payloadName + ", " + field.schemaConstantName() + ", context, " + fallbackExpr(field) + ")";
         return switch (field.accessStrategy()) {
             case ASSIGN -> indent + "self." + field.fieldName() + " = " + readCall + ";\n";
             case MUTATE_LIST -> {
@@ -1044,13 +1775,21 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             }
             case MUTATE_SET -> {
                 String decoded = localDecodedName(field);
-                yield indent + field.valueType() + " " + decoded + " = " + readCall + ";\n"
+                String prefix = indent + field.valueType() + " " + decoded + " = " + readCall + ";\n";
+                if (deltaApply && field.deltaMode().equals("MERGE_SET")) {
+                    yield prefix + indent + "self." + field.fieldName() + ".addAll(" + decoded + ");\n";
+                }
+                yield prefix
                         + indent + "self." + field.fieldName() + ".clear();\n"
                         + indent + "self." + field.fieldName() + ".addAll(" + decoded + ");\n";
             }
             case MUTATE_MAP -> {
                 String decoded = localDecodedName(field);
-                yield indent + field.valueType() + " " + decoded + " = " + readCall + ";\n"
+                String prefix = indent + field.valueType() + " " + decoded + " = " + readCall + ";\n";
+                if (deltaApply && field.deltaMode().equals("MERGE_MAP")) {
+                    yield prefix + indent + "self." + field.fieldName() + ".putAll(" + decoded + ");\n";
+                }
+                yield prefix
                         + indent + "self." + field.fieldName() + ".clear();\n"
                         + indent + "self." + field.fieldName() + ".putAll(" + decoded + ");\n";
             }
@@ -1098,6 +1837,11 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         return value == null ? null : (TypeMirror) value.getValue();
     }
 
+    private Integer intValue(Map<String, AnnotationValue> values, String key) {
+        AnnotationValue value = values.get(key);
+        return value == null ? null : ((Number) value.getValue()).intValue();
+    }
+
     private boolean needsImport(String packageName, String qualifiedName) {
         int lastDot = qualifiedName.lastIndexOf('.');
         if (lastDot < 0) {
@@ -1114,14 +1858,65 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             String fieldName,
             String id,
             String valueType,
+            RawKind rawKind,
             String syncScope,
             boolean persist,
             String serializerExpression,
-            FieldAccessStrategy accessStrategy
+            FieldAccessStrategy accessStrategy,
+            String deltaMode,
+            boolean nestedSyncModel
     ) {
     }
 
     private record ResolvedSerializer(String valueType, String serializerExpression, RawKind rawKind) {
+    }
+
+    private String packetSerializerConstantName(FieldSpec field) {
+        return field.constantName() + "_SERIALIZER";
+    }
+
+    private String packetDecodedValueName(FieldSpec field) {
+        return "__pi_" + field.fieldName();
+    }
+
+    private String packetIncomingValueName(FieldSpec field) {
+        return "__pi_raw_" + field.fieldName();
+    }
+
+    private String packetFallbackExpr(FieldSpec field) {
+        return switch (field.rawKind()) {
+            case LIST -> "new java.util.ArrayList<>()";
+            case SET -> "new java.util.LinkedHashSet<>()";
+            case MAP -> "new java.util.LinkedHashMap<>()";
+            case SCALAR -> switch (field.valueType()) {
+                case "java.lang.Byte" -> "(byte) 0";
+                case "java.lang.Short" -> "(short) 0";
+                case "java.lang.Integer" -> "0";
+                case "java.lang.Long" -> "0L";
+                case "java.lang.Boolean" -> "false";
+                case "java.lang.Float" -> "0F";
+                case "java.lang.Double" -> "0D";
+                case "java.lang.String" -> "\"\"";
+                case "java.util.UUID" -> "new java.util.UUID(0L, 0L)";
+                case "net.minecraft.resources.ResourceLocation" -> "ResourceLocation.fromNamespaceAndPath(\"minecraft\", \"empty\")";
+                case "net.minecraft.nbt.CompoundTag" -> "new CompoundTag()";
+                case "net.minecraft.core.BlockPos" -> "net.minecraft.core.BlockPos.ZERO";
+                case "net.minecraft.world.phys.Vec3" -> "net.minecraft.world.phys.Vec3.ZERO";
+                case "net.minecraft.world.item.ItemStack" -> "net.minecraft.world.item.ItemStack.EMPTY";
+                default -> field.valueType().startsWith("java.util.Optional<") ? "java.util.Optional.empty()" : "null";
+            };
+        };
+    }
+
+    private String joinDecodedValueNames(List<FieldSpec> fields) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < fields.size(); i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append(packetDecodedValueName(fields.get(i)));
+        }
+        return builder.toString();
     }
 
     private enum RawKind {
@@ -1138,6 +1933,14 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         MUTATE_MAP
     }
 
+    private String descriptorExpr(TypeElement typeElement, FieldSpec field) {
+        String base = typeElement.getSimpleName() + "_PiFields." + field.constantName() + ", PiSyncScope." + field.syncScope() + ", " + field.persist();
+        if ("REPLACE".equals(field.deltaMode())) {
+            return "new PiFieldDescriptor(" + base + ")";
+        }
+        return "new PiFieldDescriptor(" + base + ", PiFieldDeltaMode." + field.deltaMode() + ")";
+    }
+
     private record SchemaIdentity(String id, String namespace, String path) {
     }
 
@@ -1151,6 +1954,15 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         }
     }
 
+    private record MigrationSpec(List<MigrationStepSpec> steps) {
+        private boolean present() {
+            return !steps.isEmpty();
+        }
+    }
+
+    private record MigrationStepSpec(int fromVersion, int toVersion, String methodName) {
+    }
+
     private record LivingServiceSpec(
             String namespace,
             String path,
@@ -1158,5 +1970,21 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             String stateQualifiedName,
             String stateSimpleName
     ) {
+    }
+
+    private record PacketSpec(
+            String namespace,
+            String path,
+            int version,
+            PacketDirectionSpec direction,
+            List<FieldSpec> fields,
+            MigrationSpec migrations
+    ) {
+    }
+
+    private record PacketIdentity(String namespace, String path) {
+    }
+
+    private record PacketDirectionSpec(String directionName, String contextType) {
     }
 }

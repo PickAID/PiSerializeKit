@@ -14,8 +14,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.pickaid.piserializekit.api.packet.PiPacketCodec;
+import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.service.PiSerializeService;
 import org.pickaid.piserializekit.api.service.PiSerializers;
+import org.pickaid.piserializekit.runtime.packet.PiPacketSupport;
 
 public final class PiBuiltInSerializers {
     private static final Codec<ItemStack> ITEM_STACK_VALUE_CODEC = Codec.PASSTHROUGH.comapFlatMap(
@@ -56,8 +58,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Byte read(FriendlyByteBuf buffer) {
-            return buffer.readByte();
+        public Byte read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readByte, (byte) 0);
         }
     }
 
@@ -68,8 +70,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Short read(FriendlyByteBuf buffer) {
-            return buffer.readShort();
+        public Short read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readShort, (short) 0);
         }
     }
 
@@ -80,8 +82,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Integer read(FriendlyByteBuf buffer) {
-            return buffer.readVarInt();
+        public Integer read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readVarInt, 0);
         }
     }
 
@@ -92,8 +94,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Long read(FriendlyByteBuf buffer) {
-            return buffer.readVarLong();
+        public Long read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readVarLong, 0L);
         }
     }
 
@@ -104,8 +106,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Boolean read(FriendlyByteBuf buffer) {
-            return buffer.readBoolean();
+        public Boolean read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readBoolean, false);
         }
     }
 
@@ -116,8 +118,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Float read(FriendlyByteBuf buffer) {
-            return buffer.readFloat();
+        public Float read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readFloat, 0F);
         }
     }
 
@@ -128,8 +130,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Double read(FriendlyByteBuf buffer) {
-            return buffer.readDouble();
+        public Double read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readDouble, 0D);
         }
     }
 
@@ -140,8 +142,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public String read(FriendlyByteBuf buffer) {
-            return buffer.readUtf();
+        public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readUtf, "");
         }
     }
 
@@ -152,8 +154,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public UUID read(FriendlyByteBuf buffer) {
-            return buffer.readUUID();
+        public UUID read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readUUID, new UUID(0L, 0L));
         }
     }
 
@@ -164,8 +166,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public ResourceLocation read(FriendlyByteBuf buffer) {
-            return buffer.readResourceLocation();
+        public ResourceLocation read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readResourceLocation, null);
         }
     }
 
@@ -176,8 +178,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public CompoundTag read(FriendlyByteBuf buffer) {
-            CompoundTag tag = buffer.readNbt();
+        public CompoundTag read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            CompoundTag tag = PiPacketSupport.safeRead(context, "", buffer::readNbt, new CompoundTag());
             return tag == null ? new CompoundTag() : tag;
         }
     }
@@ -189,8 +191,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public BlockPos read(FriendlyByteBuf buffer) {
-            return buffer.readBlockPos();
+        public BlockPos read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readBlockPos, BlockPos.ZERO);
         }
     }
 
@@ -203,8 +205,13 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public Vec3 read(FriendlyByteBuf buffer) {
-            return new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble());
+        public Vec3 read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(
+                    context,
+                    "",
+                    () -> new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble()),
+                    Vec3.ZERO
+            );
         }
     }
 
@@ -215,8 +222,8 @@ public final class PiBuiltInSerializers {
         }
 
         @Override
-        public ItemStack read(FriendlyByteBuf buffer) {
-            return buffer.readItem();
+        public ItemStack read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readItem, ItemStack.EMPTY);
         }
     }
 
