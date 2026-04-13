@@ -51,6 +51,7 @@ import org.pickaid.piserializekit.processor.support.PiProcessorPacketSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorServiceFileSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSerializerSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorSourceSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
 
 @SupportedAnnotationTypes({
@@ -491,30 +492,29 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     }
 
     private void generateFieldsType(TypeElement typeElement, List<FieldSpec> fields) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
-        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
-        String simpleName = typeElement.getSimpleName() + "_PiFields";
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        PiProcessorSourceSupport.GeneratedSourceTarget target = PiProcessorSourceSupport.generatedType(
+                processingEnv,
+                typeElement,
+                typeElement.getSimpleName() + "_PiFields"
+        );
         try {
-            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, typeElement);
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(target.qualifiedName(), typeElement);
             try (Writer writer = file.openWriter()) {
-                if (!packageName.isEmpty()) {
-                    writer.write("package " + packageName + ";\n\n");
-                }
+                writer.write(target.packageDeclaration());
                 writer.write("import org.pickaid.piserializekit.api.schema.PiFieldKey;\n\n");
-                writer.write("public final class " + simpleName + " {\n");
+                writer.write("public final class " + target.simpleName() + " {\n");
                 for (FieldSpec field : fields) {
                     writer.write("    public static final PiFieldKey " + field.constantName() + " = new PiFieldKey(" + field.index() + ", \"" + field.id() + "\");\n");
                 }
                 if (!fields.isEmpty()) {
                     writer.write("\n");
                 }
-                writer.write("    private " + simpleName + "() {\n");
+                writer.write("    private " + target.simpleName() + "() {\n");
                 writer.write("    }\n");
                 writer.write("}\n");
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+            throw new IllegalStateException("Failed to generate " + target.qualifiedName(), e);
         }
     }
 
@@ -525,19 +525,18 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             AfterDecodeSpec afterDecode,
             MigrationSpec migrations
     ) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
-        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
-        String simpleName = typeElement.getSimpleName() + "_PiSchema";
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        PiProcessorSourceSupport.GeneratedSourceTarget target = PiProcessorSourceSupport.generatedType(
+                processingEnv,
+                typeElement,
+                typeElement.getSimpleName() + "_PiSchema"
+        );
         String schemaId = schemaIdentity.id();
         int version = typeElement.getAnnotation(PiSyncModel.class).version();
         int fieldCount = fields.size();
         try {
-            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, typeElement);
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(target.qualifiedName(), typeElement);
             try (Writer writer = file.openWriter()) {
-                if (!packageName.isEmpty()) {
-                    writer.write("package " + packageName + ";\n\n");
-                }
+                writer.write(target.packageDeclaration());
                 writer.write("import net.minecraft.nbt.CompoundTag;\n");
                 writer.write("import net.minecraft.resources.ResourceLocation;\n");
                 writer.write("import java.util.List;\n");
@@ -560,7 +559,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaSerializers;\n");
                 writer.write("import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;\n\n");
                 writer.write("import org.pickaid.piserializekit.runtime.schema.registry.PiSchemas;\n\n");
-                writer.write("public final class " + simpleName + " {\n");
+                writer.write("public final class " + target.simpleName() + " {\n");
                 writer.write("    public static final String SCHEMA_ID = \"" + schemaId + "\";\n");
                 writer.write("    public static final int VERSION = " + version + ";\n");
                 writer.write("    public static final int FIELD_COUNT = " + fieldCount + ";\n");
@@ -663,30 +662,29 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("    private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type) {\n");
                 writer.write("        return PiSerializeServices.requireSerializer(type);\n");
                 writer.write("    }\n\n");
-                writer.write("    private " + simpleName + "() {\n");
+                writer.write("    private " + target.simpleName() + "() {\n");
                 writer.write("    }\n");
                 writer.write("}\n");
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+            throw new IllegalStateException("Failed to generate " + target.qualifiedName(), e);
         }
     }
 
     private void generateSchemaProviderType(TypeElement typeElement) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
-        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
-        String simpleName = typeElement.getSimpleName() + "_PiSchemaProvider";
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
-        providerTypes.add(qualifiedName);
+        PiProcessorSourceSupport.GeneratedSourceTarget target = PiProcessorSourceSupport.generatedType(
+                processingEnv,
+                typeElement,
+                typeElement.getSimpleName() + "_PiSchemaProvider"
+        );
+        providerTypes.add(target.qualifiedName());
         try {
-            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, typeElement);
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(target.qualifiedName(), typeElement);
             try (Writer writer = file.openWriter()) {
-                if (!packageName.isEmpty()) {
-                    writer.write("package " + packageName + ";\n\n");
-                }
+                writer.write(target.packageDeclaration());
                 writer.write("import org.pickaid.piserializekit.api.schema.PiSchemaProvider;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiSchemaRegistry;\n\n");
-                writer.write("public final class " + simpleName + " implements PiSchemaProvider {\n");
+                writer.write("public final class " + target.simpleName() + " implements PiSchemaProvider {\n");
                 writer.write("    @Override\n");
                 writer.write("    public void register(PiSchemaRegistry registry) {\n");
                 writer.write("        registry.register(" + typeElement.getSimpleName() + ".class, " + typeElement.getSimpleName() + "_PiSchema.BINDING);\n");
@@ -694,7 +692,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("}\n");
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+            throw new IllegalStateException("Failed to generate " + target.qualifiedName(), e);
         }
     }
 
@@ -1058,17 +1056,16 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     }
 
     private void generatePacketType(TypeElement typeElement, PacketSpec packetSpec) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
-        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
-        String simpleName = typeElement.getSimpleName() + "_PiPacket";
+        PiProcessorSourceSupport.GeneratedSourceTarget target = PiProcessorSourceSupport.generatedType(
+                processingEnv,
+                typeElement,
+                typeElement.getSimpleName() + "_PiPacket"
+        );
         String typeName = typeElement.getSimpleName().toString();
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
         try {
-            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, typeElement);
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(target.qualifiedName(), typeElement);
             try (Writer writer = file.openWriter()) {
-                if (!packageName.isEmpty()) {
-                    writer.write("package " + packageName + ";\n\n");
-                }
+                writer.write(target.packageDeclaration());
                 writer.write("import java.util.List;\n");
                 writer.write("import net.minecraft.nbt.CompoundTag;\n");
                 writer.write("import net.minecraft.network.FriendlyByteBuf;\n");
@@ -1092,7 +1089,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaFieldCodecs;\n");
                 writer.write("import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaSerializers;\n\n");
                 writer.write("import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;\n\n");
-                writer.write("public final class " + simpleName + " {\n");
+                writer.write("public final class " + target.simpleName() + " {\n");
                 writer.write("    public static final int VERSION = " + packetSpec.version() + ";\n");
                 writer.write("    public static final ResourceLocation PACKET_ID = ResourceLocation.fromNamespaceAndPath(\"" + packetSpec.namespace() + "\", \"" + packetSpec.path() + "\");\n");
                 if (!packetSpec.fields().isEmpty()) {
@@ -1209,31 +1206,30 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("    private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type) {\n");
                 writer.write("        return PiSerializeServices.requireSerializer(type);\n");
                 writer.write("    }\n\n");
-                writer.write("    private " + simpleName + "() {\n");
+                writer.write("    private " + target.simpleName() + "() {\n");
                 writer.write("    }\n");
                 writer.write("}\n");
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+            throw new IllegalStateException("Failed to generate " + target.qualifiedName(), e);
         }
     }
 
     private void generatePacketProviderType(TypeElement typeElement) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
-        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
-        String simpleName = typeElement.getSimpleName() + "_PiPacketProvider";
+        PiProcessorSourceSupport.GeneratedSourceTarget target = PiProcessorSourceSupport.generatedType(
+                processingEnv,
+                typeElement,
+                typeElement.getSimpleName() + "_PiPacketProvider"
+        );
         String packetSimpleName = typeElement.getSimpleName() + "_PiPacket";
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
-        packetProviderTypes.add(qualifiedName);
+        packetProviderTypes.add(target.qualifiedName());
         try {
-            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, typeElement);
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(target.qualifiedName(), typeElement);
             try (Writer writer = file.openWriter()) {
-                if (!packageName.isEmpty()) {
-                    writer.write("package " + packageName + ";\n\n");
-                }
+                writer.write(target.packageDeclaration());
                 writer.write("import " + PACKET_PROVIDER + ";\n");
                 writer.write("import " + PACKET_REGISTRY + ";\n\n");
-                writer.write("public final class " + simpleName + " implements PiPacketProvider {\n");
+                writer.write("public final class " + target.simpleName() + " implements PiPacketProvider {\n");
                 writer.write("    @Override\n");
                 writer.write("    public void register(PiPacketRegistry registry) {\n");
                 writer.write("        registry.register(" + typeElement.getSimpleName() + ".class, " + packetSimpleName + ".BINDING);\n");
@@ -1241,7 +1237,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("}\n");
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+            throw new IllegalStateException("Failed to generate " + target.qualifiedName(), e);
         }
     }
 
@@ -1317,33 +1313,32 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     }
 
     private void generateLivingDescriptorType(TypeElement serviceType, LivingServiceSpec spec) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(serviceType);
-        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
-        String simpleName = serviceType.getSimpleName() + "_PiLivingDescriptor";
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        PiProcessorSourceSupport.GeneratedSourceTarget target = PiProcessorSourceSupport.generatedType(
+                processingEnv,
+                serviceType,
+                serviceType.getSimpleName() + "_PiLivingDescriptor"
+        );
         try {
-            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, serviceType);
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(target.qualifiedName(), serviceType);
             try (Writer writer = file.openWriter()) {
-                if (!packageName.isEmpty()) {
-                    writer.write("package " + packageName + ";\n\n");
-                }
+                writer.write(target.packageDeclaration());
                 writer.write("import net.minecraft.resources.ResourceLocation;\n");
                 writer.write("import net.minecraftforge.common.capabilities.Capability;\n");
                 writer.write("import net.minecraftforge.common.capabilities.CapabilityManager;\n");
                 writer.write("import net.minecraftforge.common.capabilities.CapabilityToken;\n");
                 writer.write("import " + LIVING_SERVICE_CONTEXT + ";\n");
                 writer.write("import " + GENERATED_LIVING_SERVICE_DESCRIPTOR + ";\n");
-                if (needsImport(packageName, spec.stateQualifiedName())) {
+                if (needsImport(target.packageName(), spec.stateQualifiedName())) {
                     writer.write("import " + spec.stateQualifiedName() + ";\n");
                 }
                 writer.write("\n");
-                writer.write("public final class " + simpleName + " extends PiGeneratedLivingServiceDescriptor<" +
+                writer.write("public final class " + target.simpleName() + " extends PiGeneratedLivingServiceDescriptor<" +
                         spec.serviceSimpleName() + ", " + spec.stateSimpleName() + "> {\n");
                 writer.write("    private static final class CapabilityHolder {\n");
                 writer.write("        private static final Capability<" + spec.serviceSimpleName() + "> VALUE = CapabilityManager.get(new CapabilityToken<>() {\n");
                 writer.write("        });\n");
                 writer.write("    }\n\n");
-                writer.write("    public " + simpleName + "() {\n");
+                writer.write("    public " + target.simpleName() + "() {\n");
                 writer.write("        super(ResourceLocation.fromNamespaceAndPath(\"" + spec.namespace() + "\", \"" + spec.path() + "\"), " +
                         spec.serviceSimpleName() + ".class, " + spec.stateSimpleName() + ".class);\n");
                 writer.write("    }\n\n");
@@ -1358,26 +1353,25 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("}\n");
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+            throw new IllegalStateException("Failed to generate " + target.qualifiedName(), e);
         }
     }
 
     private void generateLivingProviderType(TypeElement serviceType) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(serviceType);
-        String packageName = packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
-        String simpleName = serviceType.getSimpleName() + "_PiLivingProvider";
+        PiProcessorSourceSupport.GeneratedSourceTarget target = PiProcessorSourceSupport.generatedType(
+                processingEnv,
+                serviceType,
+                serviceType.getSimpleName() + "_PiLivingProvider"
+        );
         String descriptorSimpleName = serviceType.getSimpleName() + "_PiLivingDescriptor";
-        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
-        livingProviderTypes.add(qualifiedName);
+        livingProviderTypes.add(target.qualifiedName());
         try {
-            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, serviceType);
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(target.qualifiedName(), serviceType);
             try (Writer writer = file.openWriter()) {
-                if (!packageName.isEmpty()) {
-                    writer.write("package " + packageName + ";\n\n");
-                }
+                writer.write(target.packageDeclaration());
                 writer.write("import " + LIVING_SERVICE_PROVIDER + ";\n");
                 writer.write("import " + LIVING_SERVICE_REGISTRY + ";\n\n");
-                writer.write("public final class " + simpleName + " implements PiLivingServiceProvider {\n");
+                writer.write("public final class " + target.simpleName() + " implements PiLivingServiceProvider {\n");
                 writer.write("    @Override\n");
                 writer.write("    public void register(PiLivingServiceRegistry registry) {\n");
                 writer.write("        registry.register(new " + descriptorSimpleName + "());\n");
@@ -1385,7 +1379,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 writer.write("}\n");
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate " + qualifiedName, e);
+            throw new IllegalStateException("Failed to generate " + target.qualifiedName(), e);
         }
     }
 
