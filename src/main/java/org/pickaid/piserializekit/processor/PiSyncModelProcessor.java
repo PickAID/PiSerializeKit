@@ -43,6 +43,7 @@ import org.pickaid.piserializekit.processor.model.PiFieldAccessStrategy;
 import org.pickaid.piserializekit.processor.model.PiRawKind;
 import org.pickaid.piserializekit.processor.model.PiResolvedResourceLocation;
 import org.pickaid.piserializekit.processor.model.PiResolvedSerializer;
+import org.pickaid.piserializekit.processor.support.PiProcessorExecutableSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorFieldSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorMigrationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorNames;
@@ -111,8 +112,9 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 if (!validateConcreteClassType(typeElement, "@PiSyncModel")) {
                     continue;
                 }
-                NoArgConstructorStatus noArgConstructorStatus = noArgConstructorStatus(typeElement, typeElement);
-                if (noArgConstructorStatus == NoArgConstructorStatus.MISSING) {
+                PiProcessorExecutableSupport.NoArgConstructorStatus noArgConstructorStatus =
+                        PiProcessorExecutableSupport.noArgConstructorStatus(processingEnv, typeElement, typeElement);
+                if (noArgConstructorStatus == PiProcessorExecutableSupport.NoArgConstructorStatus.MISSING) {
                     processingEnv.getMessager().printMessage(
                             Diagnostic.Kind.ERROR,
                             "@PiSyncModel types must declare an accessible no-arg constructor",
@@ -120,7 +122,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                     );
                     continue;
                 }
-                if (noArgConstructorStatus == NoArgConstructorStatus.THROWS_CHECKED) {
+                if (noArgConstructorStatus == PiProcessorExecutableSupport.NoArgConstructorStatus.THROWS_CHECKED) {
                     processingEnv.getMessager().printMessage(
                             Diagnostic.Kind.ERROR,
                             "@PiSyncModel no-arg constructors must not throw checked exceptions because generated bindings instantiate state hosts directly",
@@ -224,81 +226,6 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private boolean isPacketMember(Element element) {
         Element enclosing = element.getEnclosingElement();
         return enclosing instanceof TypeElement typeElement && findAnnotation(typeElement, PACKET_ANNOTATION) != null;
-    }
-
-    private NoArgConstructorStatus noArgConstructorStatus(TypeElement typeElement, Element accessSite) {
-        String ownerPackage = packageName(typeElement);
-        String accessPackage = packageName(accessSite);
-        boolean samePackage = ownerPackage.equals(accessPackage);
-        boolean hasExplicitConstructor = false;
-        for (Element enclosedElement : typeElement.getEnclosedElements()) {
-            if (enclosedElement.getKind() != ElementKind.CONSTRUCTOR) {
-                continue;
-            }
-            hasExplicitConstructor = true;
-            ExecutableElement constructor = (ExecutableElement) enclosedElement;
-            if (constructor.getParameters().isEmpty() && constructorAccessible(constructor, samePackage)) {
-                return declaresCheckedExceptions(constructor)
-                        ? NoArgConstructorStatus.THROWS_CHECKED
-                        : NoArgConstructorStatus.ACCESSIBLE;
-            }
-        }
-        return hasExplicitConstructor ? NoArgConstructorStatus.MISSING : NoArgConstructorStatus.ACCESSIBLE;
-    }
-
-    private MatchingConstructorStatus matchingConstructorStatus(TypeElement typeElement, String parameterType) {
-        boolean hasExplicitConstructor = false;
-        boolean samePackage = true;
-        for (Element enclosedElement : typeElement.getEnclosedElements()) {
-            if (enclosedElement.getKind() != ElementKind.CONSTRUCTOR) {
-                continue;
-            }
-            hasExplicitConstructor = true;
-            ExecutableElement constructor = (ExecutableElement) enclosedElement;
-            if (!constructorAccessible(constructor, samePackage)) {
-                continue;
-            }
-            if (constructor.getParameters().size() != 1) {
-                continue;
-            }
-            if (parameterType.equals(constructor.getParameters().get(0).asType().toString())) {
-                return declaresCheckedExceptions(constructor)
-                        ? MatchingConstructorStatus.THROWS_CHECKED
-                        : MatchingConstructorStatus.ACCESSIBLE;
-            }
-        }
-        return hasExplicitConstructor ? MatchingConstructorStatus.MISSING : MatchingConstructorStatus.ACCESSIBLE;
-    }
-
-    private boolean constructorAccessible(ExecutableElement constructor, boolean samePackage) {
-        Set<Modifier> modifiers = constructor.getModifiers();
-        if (modifiers.contains(Modifier.PRIVATE)) {
-            return false;
-        }
-        if (modifiers.contains(Modifier.PUBLIC)) {
-            return true;
-        }
-        return samePackage;
-    }
-
-    private boolean declaresCheckedExceptions(ExecutableElement executable) {
-        TypeElement runtimeExceptionType = processingEnv.getElementUtils().getTypeElement(RuntimeException.class.getCanonicalName());
-        TypeElement errorType = processingEnv.getElementUtils().getTypeElement(Error.class.getCanonicalName());
-        if (runtimeExceptionType == null || errorType == null) {
-            return !executable.getThrownTypes().isEmpty();
-        }
-        for (TypeMirror thrownType : executable.getThrownTypes()) {
-            if (!processingEnv.getTypeUtils().isAssignable(thrownType, runtimeExceptionType.asType())
-                    && !processingEnv.getTypeUtils().isAssignable(thrownType, errorType.asType())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String packageName(Element element) {
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(element);
-        return packageElement.isUnnamed() ? "" : packageElement.getQualifiedName().toString();
     }
 
     private List<FieldSpec> collectFields(TypeElement typeElement) {
@@ -478,8 +405,9 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             );
             return null;
         }
-        NoArgConstructorStatus constructorStatus = noArgConstructorStatus(serializerTypeElement, fieldElement);
-        if (constructorStatus == NoArgConstructorStatus.MISSING) {
+        PiProcessorExecutableSupport.NoArgConstructorStatus constructorStatus =
+                PiProcessorExecutableSupport.noArgConstructorStatus(processingEnv, serializerTypeElement, fieldElement);
+        if (constructorStatus == PiProcessorExecutableSupport.NoArgConstructorStatus.MISSING) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
                     "@PiField.serializer must declare an accessible no-arg constructor",
@@ -487,7 +415,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             );
             return null;
         }
-        if (constructorStatus == NoArgConstructorStatus.THROWS_CHECKED) {
+        if (constructorStatus == PiProcessorExecutableSupport.NoArgConstructorStatus.THROWS_CHECKED) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
                     "@PiField.serializer must declare a no-arg constructor that does not throw checked exceptions",
@@ -1059,7 +987,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 }
             }
             if (compatible) {
-                if (declaresCheckedExceptions(constructor)) {
+                if (PiProcessorExecutableSupport.declaresCheckedExceptions(processingEnv, constructor)) {
                     processingEnv.getMessager().printMessage(
                             Diagnostic.Kind.ERROR,
                             "@PiPacket constructors matching @PiField order must not throw checked exceptions because generated bindings instantiate packets directly",
@@ -1345,8 +1273,9 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     }
 
     private LivingServiceSpec livingServiceSpec(TypeElement typeElement) {
-        MatchingConstructorStatus constructorStatus = matchingConstructorStatus(typeElement, LIVING_SERVICE_CONTEXT);
-        if (constructorStatus == MatchingConstructorStatus.MISSING) {
+        PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
+                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LIVING_SERVICE_CONTEXT);
+        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.MISSING) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
                     "@PiLivingService types must declare an accessible constructor accepting PiLivingServiceContext",
@@ -1354,7 +1283,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             );
             return null;
         }
-        if (constructorStatus == MatchingConstructorStatus.THROWS_CHECKED) {
+        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.THROWS_CHECKED) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
                     "@PiLivingService constructors accepting PiLivingServiceContext must not throw checked exceptions because generated descriptors instantiate services directly",
@@ -1594,7 +1523,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 );
                 return null;
             }
-            if (declaresCheckedExceptions(method)) {
+            if (PiProcessorExecutableSupport.declaresCheckedExceptions(processingEnv, method)) {
                 processingEnv.getMessager().printMessage(
                         Diagnostic.Kind.ERROR,
                         "@PiAfterDecode methods must not throw checked exceptions because generated bindings invoke them directly",
@@ -1645,7 +1574,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             if (method.getAnnotation(annotationType) == null) {
                 continue;
             }
-            if (!declaresCheckedExceptions(method)) {
+            if (!PiProcessorExecutableSupport.declaresCheckedExceptions(processingEnv, method)) {
                 continue;
             }
             processingEnv.getMessager().printMessage(
@@ -1984,15 +1913,4 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private record PacketDirectionSpec(String directionName, String contextType) {
     }
 
-    private enum NoArgConstructorStatus {
-        ACCESSIBLE,
-        MISSING,
-        THROWS_CHECKED
-    }
-
-    private enum MatchingConstructorStatus {
-        ACCESSIBLE,
-        MISSING,
-        THROWS_CHECKED
-    }
 }
