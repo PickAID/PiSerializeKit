@@ -1,12 +1,12 @@
 package org.pickaid.piserializekit.processor;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
@@ -17,46 +17,35 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;
 import org.pickaid.piserializekit.api.schema.PiAfterDecode;
 import org.pickaid.piserializekit.api.schema.PiField;
-import org.pickaid.piserializekit.api.schema.PiFieldCodecProvider;
 import org.pickaid.piserializekit.api.schema.PiInferredFieldCodec;
 import org.pickaid.piserializekit.api.schema.PiSchemaUpgrade;
 import org.pickaid.piserializekit.api.schema.PiSyncModel;
 import org.pickaid.piserializekit.processor.migration.PiMigrationCollectionResult;
 import org.pickaid.piserializekit.processor.migration.PiMigrationValidationFailure;
 import org.pickaid.piserializekit.processor.model.PiAfterDecodeSpec;
-import org.pickaid.piserializekit.processor.model.PiFieldAccessStrategy;
 import org.pickaid.piserializekit.processor.model.PiFieldSpec;
 import org.pickaid.piserializekit.processor.model.PiLivingServiceSpec;
 import org.pickaid.piserializekit.processor.model.PiMigrationPlan;
-import org.pickaid.piserializekit.processor.model.PiPacketDirectionSpec;
-import org.pickaid.piserializekit.processor.model.PiPacketIdentity;
 import org.pickaid.piserializekit.processor.model.PiPacketSpec;
-import org.pickaid.piserializekit.processor.model.PiRawKind;
 import org.pickaid.piserializekit.processor.model.PiResolvedResourceLocation;
-import org.pickaid.piserializekit.processor.model.PiResolvedSerializer;
 import org.pickaid.piserializekit.processor.model.PiSchemaIdentity;
+import org.pickaid.piserializekit.processor.support.PiProcessorAnnotationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorExecutableSupport;
-import org.pickaid.piserializekit.processor.support.PiProcessorFieldSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorFieldAuthoringSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorLivingGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorMigrationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorNames;
 import org.pickaid.piserializekit.processor.support.PiProcessorPacketGenerationSupport;
-import org.pickaid.piserializekit.processor.support.PiProcessorPacketSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorPacketAuthoringSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorServiceFileSupport;
-import org.pickaid.piserializekit.processor.support.PiProcessorSerializerSupport;
-import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
 
 @SupportedAnnotationTypes({
         "org.pickaid.piserializekit.api.schema.PiSyncModel",
@@ -90,6 +79,32 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private final Set<String> livingProviderTypes = new LinkedHashSet<>();
     private final Map<String, String> schemaIds = new LinkedHashMap<>();
     private final Map<String, String> packetIds = new LinkedHashMap<>();
+    private PiProcessorAnnotationSupport annotationSupport;
+    private PiProcessorFieldAuthoringSupport fieldSupport;
+    private PiProcessorPacketAuthoringSupport packetSupport;
+
+    @Override
+    public synchronized void init(ProcessingEnvironment processingEnv) {
+        super.init(processingEnv);
+        this.annotationSupport = new PiProcessorAnnotationSupport(processingEnv);
+        this.fieldSupport = new PiProcessorFieldAuthoringSupport(
+                processingEnv,
+                annotationSupport,
+                FIELD_ANNOTATION,
+                INFERRED_FIELD_CODEC,
+                PACKET_ANNOTATION
+        );
+        this.packetSupport = new PiProcessorPacketAuthoringSupport(
+                processingEnv,
+                annotationSupport,
+                fieldSupport,
+                PACKET_ANNOTATION,
+                PACKET_NAMESPACE_ANNOTATION,
+                SERVER_PACKET,
+                CLIENT_PACKET,
+                BIDIRECTIONAL_PACKET
+        );
+    }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
@@ -99,12 +114,15 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             writeLivingProviderServiceFile();
             return false;
         }
-        validateAnnotationHosts(roundEnv);
+        annotationSupport.validateAnnotationHosts(roundEnv, PACKET_ANNOTATION);
         TypeElement packetAnnotation = processingEnv.getElementUtils().getTypeElement(PACKET_ANNOTATION);
         if (packetAnnotation != null) {
             for (Element element : roundEnv.getElementsAnnotatedWith(packetAnnotation)) {
                 if (element instanceof TypeElement typeElement) {
-                    PiPacketSpec packetSpec = resolvePacketSpec(typeElement);
+                    if (!validateConcreteClassType(typeElement, "@PiPacket")) {
+                        continue;
+                    }
+                    PiPacketSpec packetSpec = packetSupport.resolvePacketSpec(typeElement);
                     if (packetSpec != null && reservePacketId(typeElement, packetSpec)) {
                         PiProcessorPacketGenerationSupport.generatePacketType(processingEnv, typeElement, packetSpec);
                         PiProcessorPacketGenerationSupport.generatePacketProviderType(
@@ -159,7 +177,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 if (migrations == null) {
                     continue;
                 }
-                List<PiFieldSpec> fields = collectFields(typeElement);
+                List<PiFieldSpec> fields = fieldSupport.collectFields(typeElement);
                 if (fields == null) {
                     continue;
                 }
@@ -203,371 +221,6 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             }
         }
         return false;
-    }
-
-    private void validateAnnotationHosts(RoundEnvironment roundEnv) {
-        for (Element element : roundEnv.getElementsAnnotatedWith(PiField.class)) {
-            if (!isFieldHostSupported(element)) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@PiField may only be declared inside @PiSyncModel or @PiPacket types",
-                        element
-                );
-            }
-        }
-        for (Element element : roundEnv.getElementsAnnotatedWith(PiAfterDecode.class)) {
-            if (!isSyncModelMember(element)) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@PiAfterDecode may only be declared inside @PiSyncModel types",
-                        element
-                );
-            }
-        }
-        for (Element element : roundEnv.getElementsAnnotatedWith(PiSchemaUpgrade.class)) {
-            if (!isSyncModelMember(element)) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@PiSchemaUpgrade may only be declared inside @PiSyncModel types",
-                        element
-                );
-            }
-        }
-        for (Element element : roundEnv.getElementsAnnotatedWith(PiPacketUpgrade.class)) {
-            if (!isPacketMember(element)) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "@PiPacketUpgrade may only be declared inside @PiPacket types",
-                        element
-                );
-            }
-        }
-    }
-
-    private boolean isFieldHostSupported(Element element) {
-        return isSyncModelMember(element) || isPacketMember(element);
-    }
-
-    private boolean isSyncModelMember(Element element) {
-        Element enclosing = element.getEnclosingElement();
-        return enclosing instanceof TypeElement typeElement && typeElement.getAnnotation(PiSyncModel.class) != null;
-    }
-
-    private boolean isPacketMember(Element element) {
-        Element enclosing = element.getEnclosingElement();
-        return enclosing instanceof TypeElement typeElement && findAnnotation(typeElement, PACKET_ANNOTATION) != null;
-    }
-
-    private List<PiFieldSpec> collectFields(TypeElement typeElement) {
-        List<PiFieldSpec> fields = new ArrayList<>();
-        Map<String, VariableElement> fieldIds = new LinkedHashMap<>();
-        int index = 0;
-        boolean valid = true;
-        for (Element enclosedElement : typeElement.getEnclosedElements()) {
-            if (enclosedElement.getKind() != ElementKind.FIELD) {
-                continue;
-            }
-            PiField piField = enclosedElement.getAnnotation(PiField.class);
-            if (piField == null) {
-                continue;
-            }
-            PiFieldSpec field = resolveFieldSpec((VariableElement) enclosedElement, piField, index);
-            if (field == null) {
-                valid = false;
-                continue;
-            }
-            VariableElement duplicate = fieldIds.putIfAbsent(field.id(), (VariableElement) enclosedElement);
-            if (duplicate != null) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "Duplicate @PiField.id \"" + field.id() + "\" in " + typeElement.getSimpleName()
-                                + " (already declared by field " + duplicate.getSimpleName() + ")",
-                        enclosedElement
-                );
-                valid = false;
-                continue;
-            }
-            fields.add(field);
-            index++;
-        }
-        return valid ? fields : null;
-    }
-
-    private PiFieldSpec resolveFieldSpec(VariableElement fieldElement, PiField annotation, int index) {
-        if (!validateFieldAuthoringMode(fieldElement)) {
-            return null;
-        }
-        boolean packetField = isPacketField(fieldElement);
-        PiResolvedSerializer serializer = resolveSerializer(fieldElement, annotation);
-        if (serializer == null) {
-            return null;
-        }
-        PiFieldAccessStrategy accessStrategy = PiProcessorFieldSupport.resolveAccessStrategy(
-                fieldElement.getModifiers().contains(Modifier.FINAL),
-                serializer.rawKind()
-        );
-        if (accessStrategy == null && !packetField) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Final @PiField values must use mutable List/Set/Map types or drop final",
-                    fieldElement
-            );
-            return null;
-        }
-        String deltaMode = annotation.delta().name();
-        if (!isSupportedDeltaMode(
-                deltaMode,
-                serializer.rawKind(),
-                PiProcessorTypeSupport.isNestedSyncModelType(processingEnv.getTypeUtils(), fieldElement.asType()),
-                fieldElement
-        )) {
-            return null;
-        }
-        String fieldId = PiProcessorFieldSupport.resolveFieldId(fieldElement.getSimpleName().toString(), annotation.id());
-        String payloadKeyError = PiProcessorFieldSupport.validatePayloadKey(fieldElement.getSimpleName().toString(), fieldId);
-        if (payloadKeyError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    payloadKeyError,
-                    fieldElement
-            );
-            return null;
-        }
-        boolean nestedSyncModel = PiProcessorTypeSupport.isNestedSyncModelType(
-                processingEnv.getTypeUtils(),
-                fieldElement.asType()
-        );
-        return new PiFieldSpec(
-                index,
-                PiProcessorNames.constantName(fieldElement.getSimpleName().toString()),
-                PiProcessorNames.constantName(fieldElement.getSimpleName().toString()) + "_FIELD",
-                fieldElement.getSimpleName().toString(),
-                fieldId,
-                serializer.valueType(),
-                serializer.rawKind(),
-                annotation.sync().name(),
-                annotation.persist(),
-                serializer.serializerExpression(),
-                accessStrategy,
-                deltaMode,
-                nestedSyncModel
-        );
-    }
-
-    private boolean validateFieldAuthoringMode(VariableElement fieldElement) {
-        AnnotationMirror mirror = findAnnotation(fieldElement, FIELD_ANNOTATION);
-        if (mirror == null) {
-            return true;
-        }
-        boolean syncModelField = isSyncModelField(fieldElement);
-        boolean packetField = isPacketField(fieldElement);
-        String fieldModifierError = PiProcessorFieldSupport.validateFieldModifiers(
-                fieldElement.getSimpleName().toString(),
-                fieldElement.getModifiers()
-        );
-        if (fieldModifierError != null) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, fieldModifierError, fieldElement);
-            return false;
-        }
-        Map<String, AnnotationValue> declaredValues = declaredAnnotationValues(mirror);
-        String fieldAuthoringError = PiProcessorFieldSupport.validateFieldAuthoringMode(
-                syncModelField,
-                packetField,
-                declaredValues.containsKey("id"),
-                stringValue(annotationValues(mirror), "id"),
-                declaredValues.containsKey("sync"),
-                declaredValues.containsKey("persist"),
-                fieldElement.getSimpleName().toString(),
-                enumValue(annotationValues(mirror), "sync"),
-                booleanValue(annotationValues(mirror), "persist"),
-                enumValue(annotationValues(mirror), "delta")
-        );
-        if (fieldAuthoringError != null) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, fieldAuthoringError, fieldElement);
-            return false;
-        }
-        return true;
-    }
-
-    private boolean isSyncModelField(VariableElement fieldElement) {
-        Element enclosing = fieldElement.getEnclosingElement();
-        return enclosing instanceof TypeElement typeElement && typeElement.getAnnotation(PiSyncModel.class) != null;
-    }
-
-    private boolean isPacketField(VariableElement fieldElement) {
-        Element enclosing = fieldElement.getEnclosingElement();
-        return enclosing instanceof TypeElement typeElement && findAnnotation(typeElement, PACKET_ANNOTATION) != null;
-    }
-
-    private boolean isSupportedDeltaMode(String deltaMode, PiRawKind rawKind, boolean nestedSyncModel, Element fieldElement) {
-        String deltaModeError = PiProcessorFieldSupport.validateDeltaMode(deltaMode, rawKind.name(), nestedSyncModel);
-        if (deltaModeError != null) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, deltaModeError, fieldElement);
-            return false;
-        }
-        return true;
-    }
-
-    private PiResolvedSerializer resolveSerializer(VariableElement fieldElement, PiField annotation) {
-        TypeMirror serializerType = serializerType(fieldElement);
-        if (serializerType != null && !INFERRED_FIELD_CODEC.equals(serializerType.toString())) {
-            return resolveCustomSerializer(fieldElement, serializerType);
-        }
-        return resolveInferredSerializer(fieldElement.asType(), fieldElement);
-    }
-
-    private PiResolvedSerializer resolveCustomSerializer(VariableElement fieldElement, TypeMirror serializerType) {
-        Element serializerElement = processingEnv.getTypeUtils().asElement(serializerType);
-        if (!(serializerElement instanceof TypeElement serializerTypeElement)) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiField.serializer must reference a concrete codec provider class",
-                    fieldElement
-            );
-            return null;
-        }
-        String serializerTypeError = PiProcessorSerializerSupport.validateCustomSerializerType(serializerTypeElement);
-        if (serializerTypeError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    serializerTypeError,
-                    fieldElement
-            );
-            return null;
-        }
-        PiProcessorExecutableSupport.NoArgConstructorStatus constructorStatus =
-                PiProcessorExecutableSupport.noArgConstructorStatus(processingEnv, serializerTypeElement, fieldElement);
-        if (constructorStatus == PiProcessorExecutableSupport.NoArgConstructorStatus.MISSING) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiField.serializer must declare an accessible no-arg constructor",
-                    fieldElement
-            );
-            return null;
-        }
-        if (constructorStatus == PiProcessorExecutableSupport.NoArgConstructorStatus.THROWS_CHECKED) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiField.serializer must declare a no-arg constructor that does not throw checked exceptions",
-                    fieldElement
-            );
-            return null;
-        }
-        TypeMirror providerValueType = PiProcessorTypeSupport.resolveProviderValueType(
-                processingEnv.getTypeUtils(),
-                serializerTypeElement.asType()
-        );
-        String providerValueTypeError = PiProcessorSerializerSupport.validateCustomSerializerValueType(
-                processingEnv.getTypeUtils(),
-                fieldElement.asType(),
-                providerValueType
-        );
-        if (providerValueTypeError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    providerValueTypeError,
-                    fieldElement
-            );
-            return null;
-        }
-        return PiProcessorSerializerSupport.customSerializer(
-                processingEnv.getTypeUtils(),
-                fieldElement.asType(),
-                serializerType
-        );
-    }
-
-    private PiResolvedSerializer resolveInferredSerializer(TypeMirror type, Element fieldElement) {
-        PiResolvedSerializer builtInScalar = PiProcessorSerializerSupport.resolveBuiltInScalarSerializer(
-                processingEnv.getTypeUtils(),
-                type,
-                PiProcessorTypeSupport.isNestedSyncModelType(processingEnv.getTypeUtils(), type),
-                PiProcessorTypeSupport.isEnumType(processingEnv.getTypeUtils(), type)
-        );
-        if (builtInScalar != null) {
-            return builtInScalar;
-        }
-        PiResolvedSerializer composite = PiProcessorSerializerSupport.resolveCompositeSerializer(
-                processingEnv.getTypeUtils(),
-                type,
-                fieldElement,
-                this::resolveInferredSerializer,
-                (argumentType, argumentFieldElement, index, label) -> {
-                    TypeMirror typeArgument = PiProcessorTypeSupport.resolveConcreteTypeArgument(argumentType, index);
-                    if (typeArgument != null) {
-                        return typeArgument;
-                    }
-                    processingEnv.getMessager().printMessage(
-                            Diagnostic.Kind.ERROR,
-                            label + " @PiField types must declare concrete generic arguments",
-                            argumentFieldElement
-                    );
-                    return null;
-                }
-        );
-        if (composite != null) {
-            return composite;
-        }
-        processingEnv.getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
-                "Unsupported @PiField type " + type + ". Add a local serializer override.",
-                fieldElement
-        );
-        return null;
-    }
-
-    private PiRawKind rawKind(TypeMirror type) {
-        return PiProcessorSerializerSupport.rawKind(processingEnv.getTypeUtils(), type);
-    }
-
-    private PiPacketSpec resolvePacketSpec(TypeElement typeElement) {
-        if (!validateConcreteClassType(typeElement, "@PiPacket")) {
-            return null;
-        }
-        AnnotationMirror mirror = findAnnotation(typeElement, PACKET_ANNOTATION);
-        if (mirror == null) {
-            return null;
-        }
-        Map<String, AnnotationValue> values = annotationValues(mirror);
-        Map<String, AnnotationValue> declaredValues = declaredAnnotationValues(mirror);
-        PiPacketIdentity packetIdentity = resolvePacketIdentity(
-                typeElement,
-                declaredValues.containsKey("id"),
-                stringValue(values, "id"),
-                declaredValues.containsKey("namespace"),
-                stringValue(values, "namespace"),
-                declaredValues.containsKey("path"),
-                stringValue(values, "path")
-        );
-        if (packetIdentity == null) {
-            return null;
-        }
-        PiPacketDirectionSpec direction = resolvePacketDirection(typeElement);
-        if (direction == null) {
-            return null;
-        }
-        Integer version = intValue(values, "version");
-        int packetVersion = version == null ? 1 : version;
-        if (packetVersion < 1) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiPacket.version must be >= 1",
-                    typeElement
-            );
-            return null;
-        }
-        PiMigrationPlan migrations = resolvePacketMigrations(typeElement, packetVersion);
-        if (migrations == null) {
-            return null;
-        }
-        List<PiFieldSpec> fields = collectFields(typeElement);
-        if (fields == null) {
-            return null;
-        }
-        if (!hasCompatiblePacketConstructor(typeElement, fields)) {
-            return null;
-        }
-        return new PiPacketSpec(packetIdentity.namespace(), packetIdentity.path(), packetVersion, direction, fields, migrations);
     }
 
     private boolean hasValidSchemaVersion(TypeElement typeElement) {
@@ -632,253 +285,6 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         return true;
     }
 
-    private PiPacketIdentity resolvePacketIdentity(
-            TypeElement typeElement,
-            boolean declaredId,
-            String explicitId,
-            boolean declaredNamespace,
-            String explicitNamespace,
-            boolean declaredPath,
-            String explicitPath
-    ) {
-        String declaredIdError = PiProcessorPacketSupport.validateDeclaredPacketId(declaredId, explicitId);
-        if (declaredIdError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    declaredIdError,
-                    typeElement
-            );
-            return null;
-        }
-        String declaredNamespaceError = PiProcessorPacketSupport.validateDeclaredPacketNamespace(declaredNamespace, explicitNamespace);
-        if (declaredNamespaceError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    declaredNamespaceError,
-                    typeElement
-            );
-            return null;
-        }
-        String declaredPathError = PiProcessorPacketSupport.validateDeclaredPacketPath(declaredPath, explicitPath);
-        if (declaredPathError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    declaredPathError,
-                    typeElement
-            );
-            return null;
-        }
-        boolean hasExplicitId = declaredId;
-        boolean hasExplicitNamespace = declaredNamespace;
-        boolean hasExplicitPath = declaredPath;
-        String identityCombinationError = PiProcessorPacketSupport.validatePacketIdentityCombination(
-                hasExplicitId,
-                hasExplicitNamespace,
-                hasExplicitPath
-        );
-        if (identityCombinationError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    identityCombinationError,
-                    typeElement
-            );
-            return null;
-        }
-        if (hasExplicitId) {
-            PiSchemaIdentity identity = resolveExplicitResourceLocation(
-                    explicitId,
-                    typeElement,
-                    "@PiPacket.id must be a namespace:path resource location"
-            );
-            return identity == null ? null : new PiPacketIdentity(identity.namespace(), identity.path());
-        }
-        String namespace = resolvePacketNamespace(typeElement, explicitNamespace);
-        if (namespace == null) {
-            return null;
-        }
-        String path = resolvePacketPath(typeElement, explicitPath);
-        if (path == null) {
-            return null;
-        }
-        return new PiPacketIdentity(namespace, path);
-    }
-
-    private String resolvePacketNamespace(TypeElement typeElement, String explicitNamespace) {
-        if (explicitNamespace != null && !explicitNamespace.isBlank()) {
-            String namespaceError = PiProcessorPacketSupport.validatePacketNamespace(explicitNamespace);
-            if (namespaceError != null) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        namespaceError,
-                        typeElement
-                );
-                return null;
-            }
-            return explicitNamespace;
-        }
-        PackageElement packageElement = processingEnv.getElementUtils().getPackageOf(typeElement);
-        AnnotationMirror packageMirror = findAnnotation(packageElement, PACKET_NAMESPACE_ANNOTATION);
-        if (packageMirror == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    PiProcessorPacketSupport.missingPacketNamespaceMessage(),
-                    typeElement
-            );
-            return null;
-        }
-        String namespace = stringValue(annotationValues(packageMirror), "value");
-        if (namespace == null || namespace.isBlank() || !PiProcessorNames.isValidNamespace(namespace)) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    PiProcessorPacketSupport.invalidPackageNamespaceMessage(namespace),
-                    packageElement
-            );
-            return null;
-        }
-        return namespace;
-    }
-
-    private String resolvePacketPath(TypeElement typeElement, String explicitPath) {
-        String path = PiProcessorPacketSupport.resolvePacketPath(
-                explicitPath,
-                typeElement.getSimpleName().toString()
-        );
-        String pathError = PiProcessorPacketSupport.validatePacketPath(path);
-        if (pathError != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    pathError,
-                    typeElement
-            );
-            return null;
-        }
-        return path;
-    }
-
-    private PiPacketDirectionSpec resolvePacketDirection(TypeElement typeElement) {
-        if (isAssignableTo(typeElement, SERVER_PACKET)) {
-            return new PiPacketDirectionSpec("SERVERBOUND", "PiServerPacketContext");
-        }
-        if (isAssignableTo(typeElement, CLIENT_PACKET)) {
-            return new PiPacketDirectionSpec("CLIENTBOUND", "PiClientPacketContext");
-        }
-        if (isAssignableTo(typeElement, BIDIRECTIONAL_PACKET)) {
-            return new PiPacketDirectionSpec("BIDIRECTIONAL", "PiPacketContext");
-        }
-        processingEnv.getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
-                "@PiPacket types must extend PiServerPacket, PiClientPacket, or PiBidirectionalPacket",
-                typeElement
-        );
-        return null;
-    }
-
-    private boolean isAssignableTo(TypeElement typeElement, String qualifiedName) {
-        TypeElement target = processingEnv.getElementUtils().getTypeElement(qualifiedName);
-        return target != null && processingEnv.getTypeUtils().isAssignable(typeElement.asType(), target.asType());
-    }
-
-    private boolean hasCompatiblePacketConstructor(TypeElement typeElement, List<PiFieldSpec> fields) {
-        Map<String, Integer> fieldTypeCounts = packetConstructorTypeCounts(fields);
-        boolean hasExplicitConstructor = false;
-        for (Element enclosedElement : typeElement.getEnclosedElements()) {
-            if (enclosedElement.getKind() != ElementKind.CONSTRUCTOR) {
-                continue;
-            }
-            hasExplicitConstructor = true;
-            ExecutableElement constructor = (ExecutableElement) enclosedElement;
-            if (constructor.getModifiers().contains(Modifier.PRIVATE) || constructor.getParameters().size() != fields.size()) {
-                continue;
-            }
-            boolean compatible = true;
-            for (int i = 0; i < fields.size(); i++) {
-                PiFieldSpec field = fields.get(i);
-                VariableElement parameter = constructor.getParameters().get(i);
-                String parameterType = PiProcessorTypeSupport.boxedTypeName(
-                        processingEnv.getTypeUtils(),
-                        parameter.asType()
-                );
-                if (!field.valueType().equals(parameterType)) {
-                    compatible = false;
-                    break;
-                }
-                if (fieldTypeCounts.getOrDefault(field.valueType(), 0) > 1
-                        && !field.fieldName().equals(parameter.getSimpleName().toString())) {
-                    compatible = false;
-                    break;
-                }
-            }
-            if (compatible) {
-                if (PiProcessorExecutableSupport.declaresCheckedExceptions(processingEnv, constructor)) {
-                    processingEnv.getMessager().printMessage(
-                            Diagnostic.Kind.ERROR,
-                            "@PiPacket constructors matching @PiField order must not throw checked exceptions because generated bindings instantiate packets directly",
-                            constructor
-                    );
-                    return false;
-                }
-                return true;
-            }
-        }
-        if (!hasExplicitConstructor && fields.isEmpty()) {
-            return true;
-        }
-        processingEnv.getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
-                "@PiPacket types must declare an accessible constructor matching @PiField order: "
-                        + expectedPacketConstructorSignature(fields),
-                typeElement
-        );
-        return false;
-    }
-
-    private Map<String, Integer> packetConstructorTypeCounts(List<PiFieldSpec> fields) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        for (PiFieldSpec field : fields) {
-            counts.merge(field.valueType(), 1, Integer::sum);
-        }
-        return counts;
-    }
-
-    private String expectedPacketConstructorSignature(List<PiFieldSpec> fields) {
-        if (fields.isEmpty()) {
-            return "()";
-        }
-        StringBuilder builder = new StringBuilder("(");
-        for (int i = 0; i < fields.size(); i++) {
-            PiFieldSpec field = fields.get(i);
-            if (i > 0) {
-                builder.append(", ");
-            }
-            builder.append(field.valueType()).append(' ').append(field.fieldName());
-        }
-        return builder.append(')').toString();
-    }
-
-    private PiMigrationPlan resolvePacketMigrations(TypeElement typeElement, int targetVersion) {
-        if (!validateMigrationMethodsDoNotThrowCheckedExceptions(typeElement, PiPacketUpgrade.class, "@PiPacketUpgrade")) {
-            return null;
-        }
-        PiMigrationCollectionResult result = PiProcessorMigrationSupport.collectMigrationSteps(
-                typeElement,
-                PiPacketUpgrade.class,
-                "@PiPacketUpgrade",
-                targetVersion,
-                PiPacketUpgrade::from,
-                PiPacketUpgrade::to
-        );
-        PiMigrationValidationFailure failure = result.failure();
-        if (failure != null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    failure.message(),
-                    failure.element()
-            );
-            return null;
-        }
-        return new PiMigrationPlan(result.steps());
-    }
-
     private void writePacketProviderServiceFile() {
         PiProcessorServiceFileSupport.writeServiceFile(
                 processingEnv,
@@ -925,14 +331,14 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             );
             return null;
         }
-        AnnotationMirror mirror = findAnnotation(typeElement, LIVING_SERVICE_ANNOTATION);
+        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LIVING_SERVICE_ANNOTATION);
         if (mirror == null) {
             return null;
         }
-        Map<String, AnnotationValue> values = annotationValues(mirror);
-        String namespace = stringValue(values, "namespace");
-        String path = stringValue(values, "path");
-        TypeMirror stateTypeMirror = typeValue(values, "state");
+        Map<String, AnnotationValue> values = annotationSupport.annotationValues(mirror);
+        String namespace = annotationSupport.stringValue(values, "namespace");
+        String path = annotationSupport.stringValue(values, "path");
+        TypeMirror stateTypeMirror = annotationSupport.typeValue(values, "state");
         if (namespace == null || path == null || stateTypeMirror == null) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
@@ -1062,72 +468,5 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         }
         return true;
     }
-
-    private TypeMirror serializerType(Element fieldElement) {
-        AnnotationMirror mirror = findAnnotation(fieldElement, FIELD_ANNOTATION);
-        if (mirror == null) {
-            return null;
-        }
-        return typeValue(annotationValues(mirror), "serializer");
-    }
-
-    private AnnotationMirror findAnnotation(Element element, String annotationName) {
-        for (AnnotationMirror annotationMirror : element.getAnnotationMirrors()) {
-            if (annotationName.equals(annotationMirror.getAnnotationType().toString())) {
-                return annotationMirror;
-            }
-        }
-        return null;
-    }
-
-    private Map<String, AnnotationValue> annotationValues(AnnotationMirror mirror) {
-        Map<String, AnnotationValue> values = new LinkedHashMap<>();
-        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
-                processingEnv.getElementUtils().getElementValuesWithDefaults(mirror).entrySet()) {
-            values.put(entry.getKey().getSimpleName().toString(), entry.getValue());
-        }
-        return values;
-    }
-
-    private Map<String, AnnotationValue> declaredAnnotationValues(AnnotationMirror mirror) {
-        Map<String, AnnotationValue> values = new LinkedHashMap<>();
-        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : mirror.getElementValues().entrySet()) {
-            values.put(entry.getKey().getSimpleName().toString(), entry.getValue());
-        }
-        return values;
-    }
-
-    private String stringValue(Map<String, AnnotationValue> values, String key) {
-        AnnotationValue value = values.get(key);
-        return value == null ? null : (String) value.getValue();
-    }
-
-    private TypeMirror typeValue(Map<String, AnnotationValue> values, String key) {
-        AnnotationValue value = values.get(key);
-        return value == null ? null : (TypeMirror) value.getValue();
-    }
-
-    private Integer intValue(Map<String, AnnotationValue> values, String key) {
-        AnnotationValue value = values.get(key);
-        return value == null ? null : ((Number) value.getValue()).intValue();
-    }
-
-    private Boolean booleanValue(Map<String, AnnotationValue> values, String key) {
-        AnnotationValue value = values.get(key);
-        return value == null ? null : (Boolean) value.getValue();
-    }
-
-    private String enumValue(Map<String, AnnotationValue> values, String key) {
-        AnnotationValue value = values.get(key);
-        if (value == null) {
-            return null;
-        }
-        Object raw = value.getValue();
-        if (raw instanceof VariableElement variableElement) {
-            return variableElement.getSimpleName().toString();
-        }
-        return raw == null ? null : raw.toString();
-    }
-
 
 }

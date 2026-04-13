@@ -14,8 +14,8 @@ class PiSyncModelProcessorStructureTest {
         long lineCount = Files.lines(processor).count();
 
         assertTrue(
-                lineCount <= 1200,
-                () -> "PiSyncModelProcessor should stay at or below 1200 lines, but was " + lineCount
+                lineCount <= 800,
+                () -> "PiSyncModelProcessor should stay at or below 800 lines, but was " + lineCount
         );
     }
 }
