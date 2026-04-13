@@ -9,6 +9,7 @@ import java.util.List;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
+import org.pickaid.piserializekit.api.runtime.PiRuntimeBindingValidationException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeConflictException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeLookupException;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
@@ -99,6 +100,24 @@ class PiSchemasTest {
         assertEquals(TestSchemaProvider.SCHEMA_ID.toString(), exception.key());
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Test
+    void rejectsSchemaBindingWhenRegisteredAgainstDifferentType() throws Exception {
+        PiSchemaRegistry registry = newRegistry();
+
+        PiRuntimeBindingValidationException exception = assertThrows(
+                PiRuntimeBindingValidationException.class,
+                () -> registry.register((Class) String.class, (PiStateBinding) new DuplicateSchemaIdBinding())
+        );
+
+        assertEquals(
+                "Binding state type mismatch: " + String.class.getName() + " != " + OtherState.class.getName(),
+                exception.getMessage()
+        );
+        assertEquals("schema-binding-validation", exception.category());
+        assertEquals(TestSchemaProvider.SCHEMA_ID.toString(), exception.bindingId());
+    }
+
     @Test
     void missingSchemaBindingReportsKnownSchemaIds() throws Exception {
         PiSchemaRegistry registry = newRegistry();
@@ -153,12 +172,14 @@ class PiSchemasTest {
     void rejectsSchemaBindingWithNonPositiveVersion() throws Exception {
         PiSchemaRegistry registry = newRegistry();
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        PiRuntimeBindingValidationException exception = assertThrows(
+                PiRuntimeBindingValidationException.class,
                 () -> registry.register(OtherState.class, new InvalidSchemaVersionBinding())
         );
 
         assertEquals("Pi schema binding version must be >= 1 for test:invalid_schema_version", exception.getMessage());
+        assertEquals("schema-binding-validation", exception.category());
+        assertEquals("test:invalid_schema_version", exception.bindingId());
     }
 
     @Test

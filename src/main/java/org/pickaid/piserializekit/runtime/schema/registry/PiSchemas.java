@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.resources.ResourceLocation;
+import org.pickaid.piserializekit.api.runtime.PiRuntimeBindingValidationException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeConflictException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeLookupException;
 import org.pickaid.piserializekit.api.schema.PiSchemaProvider;
@@ -78,7 +79,11 @@ public final class PiSchemas {
             ResourceLocation schemaId = Objects.requireNonNull(binding.schemaId(), "binding.schemaId()");
             Class<?> stateType = Objects.requireNonNull(binding.stateType(), "binding.stateType()");
             if (!type.equals(binding.stateType())) {
-                throw new IllegalArgumentException("Binding state type mismatch: " + type.getName() + " != " + binding.stateType().getName());
+                throw new PiRuntimeBindingValidationException(
+                        "schema-binding-validation",
+                        schemaId.toString(),
+                        "Binding state type mismatch: " + type.getName() + " != " + binding.stateType().getName()
+                );
             }
             PiStateBinding<?> previousByType = bindings.putIfAbsent(type, binding);
             if (previousByType != null && previousByType != binding) {

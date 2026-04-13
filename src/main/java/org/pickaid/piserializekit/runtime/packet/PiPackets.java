@@ -12,6 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.pickaid.piserializekit.api.packet.PiPacketBinding;
 import org.pickaid.piserializekit.api.packet.PiPacketProvider;
 import org.pickaid.piserializekit.api.packet.PiPacketRegistry;
+import org.pickaid.piserializekit.api.runtime.PiRuntimeBindingValidationException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeConflictException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeLookupException;
 import org.pickaid.piserializekit.runtime.PiRuntimeBootstrapSupport;
@@ -81,7 +82,9 @@ public final class PiPackets {
             ResourceLocation packetId = Objects.requireNonNull(binding.packetId(), "binding.packetId()");
             Class<?> packetType = Objects.requireNonNull(binding.packetType(), "binding.packetType()");
             if (!type.equals(binding.packetType())) {
-                throw new IllegalArgumentException(
+                throw new PiRuntimeBindingValidationException(
+                        "packet-binding-validation",
+                        packetId.toString(),
                         "Binding packet type mismatch: " + type.getName() + " != " + binding.packetType().getName()
                 );
             }

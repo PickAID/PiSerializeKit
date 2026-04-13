@@ -20,6 +20,7 @@ import org.pickaid.piserializekit.api.packet.PiPacketRegistry;
 import org.pickaid.piserializekit.api.packet.PiServerPacketContext;
 import org.pickaid.piserializekit.api.packet.PiPacketDecodeException;
 import org.pickaid.piserializekit.api.nbt.PiNbtCodec;
+import org.pickaid.piserializekit.api.runtime.PiRuntimeBindingValidationException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeConflictException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeLookupException;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
@@ -88,6 +89,24 @@ class PiPacketsTest {
         );
         assertEquals("packet-id", exception.category());
         assertEquals("test:test_notice", exception.key());
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Test
+    void rejectsPacketBindingWhenRegisteredAgainstDifferentType() throws Exception {
+        PiPacketRegistry registry = newRegistry();
+
+        PiRuntimeBindingValidationException exception = assertThrows(
+                PiRuntimeBindingValidationException.class,
+                () -> registry.register((Class) InvalidPacket.class, (PiPacketBinding) new DuplicatePacketIdBinding())
+        );
+
+        assertEquals(
+                "Binding packet type mismatch: " + InvalidPacket.class.getName() + " != " + OtherPacket.class.getName(),
+                exception.getMessage()
+        );
+        assertEquals("packet-binding-validation", exception.category());
+        assertEquals("test:test_notice", exception.bindingId());
     }
 
     @Test
@@ -269,12 +288,14 @@ class PiPacketsTest {
     void rejectsPacketBindingWithNonPositiveVersion() throws Exception {
         PiPacketRegistry registry = newRegistry();
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        PiRuntimeBindingValidationException exception = assertThrows(
+                PiRuntimeBindingValidationException.class,
                 () -> registry.register(InvalidPacket.class, new InvalidPacketVersionBinding())
         );
 
         assertEquals("Pi packet binding version must be >= 1 for test:invalid_packet_version", exception.getMessage());
+        assertEquals("packet-binding-validation", exception.category());
+        assertEquals("test:invalid_packet_version", exception.bindingId());
     }
 
     @Test
