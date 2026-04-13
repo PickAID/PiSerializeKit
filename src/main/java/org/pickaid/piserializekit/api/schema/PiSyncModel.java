@@ -7,6 +7,11 @@ import java.lang.annotation.Target;
 
 /**
  * Marks a state class for generated schema, persistence, and packet bindings.
+ *
+ * <p>Annotated types must be top-level classes because PiSerializeKit emits
+ * package-level generated companions beside the authored host type. State hosts
+ * must also expose an accessible no-arg constructor that does not throw checked
+ * exceptions because generated bindings instantiate them directly.</p>
  */
 @Retention(RetentionPolicy.SOURCE)
 @Target(ElementType.TYPE)

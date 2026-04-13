@@ -4,7 +4,7 @@ import java.util.List;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
-import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 /**
  * Runtime binding for one generated sync schema.
@@ -18,6 +18,15 @@ public interface PiStateBinding<T> extends PiSyncSchema<T> {
      * @return schema id
      */
     ResourceLocation schemaId();
+
+    /**
+     * Returns the schema identifier as the exact header string used in payloads.
+     *
+     * @return schema id string
+     */
+    default String schemaIdString() {
+        return schemaId().toString();
+    }
 
     /**
      * Returns the generated schema version.
@@ -64,6 +73,17 @@ public interface PiStateBinding<T> extends PiSyncSchema<T> {
      */
     default CompoundTag savePersisted(T self) {
         return saveProjection(self, PiProjections.persisted());
+    }
+
+    /**
+     * Serializes the default client-visible subset of the state.
+     *
+     * @param self state to serialize
+     * @return client-visible payload
+     */
+    @Override
+    default CompoundTag saveClientView(T self) {
+        return saveProjection(self, PiProjections.client());
     }
 
     /**
@@ -132,6 +152,28 @@ public interface PiStateBinding<T> extends PiSyncSchema<T> {
      */
     default CompoundTag writeDelta(T self, PiDirtyBits dirtyBits, PiProjection projection) {
         return PiDirtyPlans.forProjection(this, dirtyBits, projection).writeDelta(self);
+    }
+
+    /**
+     * Serializes a delta restricted to the default client-visible projection.
+     *
+     * @param self state to serialize
+     * @param dirtySet dirty field set
+     * @return client-visible delta
+     */
+    default CompoundTag writeClientDelta(T self, PiDirtySet dirtySet) {
+        return writeDelta(self, dirtySet, PiProjections.client());
+    }
+
+    /**
+     * Serializes a delta restricted to persisted fields.
+     *
+     * @param self state to serialize
+     * @param dirtySet dirty field set
+     * @return persisted delta
+     */
+    default CompoundTag writePersistedDelta(T self, PiDirtySet dirtySet) {
+        return writeDelta(self, dirtySet, PiProjections.persisted());
     }
 
     /**

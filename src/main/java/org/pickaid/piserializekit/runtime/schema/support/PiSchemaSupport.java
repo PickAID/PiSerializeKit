@@ -1,4 +1,4 @@
-package org.pickaid.piserializekit.runtime.schema;
+package org.pickaid.piserializekit.runtime.schema.support;
 
 import com.mojang.datafixers.util.Pair;
 import java.util.ArrayList;
@@ -17,6 +17,10 @@ import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;
 import org.pickaid.piserializekit.api.schema.PiSchemaMigration;
 import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
 import org.pickaid.piserializekit.api.schema.PiStateBinding;
+import org.pickaid.piserializekit.api.service.PiSerializeServices;
+import org.pickaid.piserializekit.api.service.PiSerializer;
+import org.pickaid.piserializekit.api.service.PiSerializerType;
+import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaFieldCodecs;
 
 public final class PiSchemaSupport {
     public static final String SCHEMA_ID_KEY = "__pi_schema";
@@ -96,7 +100,7 @@ public final class PiSchemaSupport {
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(binding, "binding");
         Objects.requireNonNull(kind, "kind");
-        String expectedSchemaId = binding.schemaId().toString();
+        String expectedSchemaId = binding.schemaIdString();
         if (!validateSchemaId(tag, context, expectedSchemaId)) {
             return null;
         }
@@ -129,7 +133,10 @@ public final class PiSchemaSupport {
                 context.issue(
                         PiDecodeIssueCode.MIGRATION_FAILURE,
                         SCHEMA_VERSION_KEY,
-                        "missing schema migration path from version " + currentVersion + " to " + targetVersion,
+                        missingMigrationPathMessage(
+                                "missing schema migration path from version " + currentVersion + " to " + targetVersion,
+                                binding.migrations()
+                        ),
                         true
                 );
                 return null;
@@ -141,7 +148,8 @@ public final class PiSchemaSupport {
                 context.issue(
                         PiDecodeIssueCode.MIGRATION_FAILURE,
                         SCHEMA_VERSION_KEY,
-                        "schema migration " + currentVersion + " -> " + migration.toVersion() + " failed: " + exception.getMessage(),
+                        "schema migration " + currentVersion + " -> " + migration.toVersion()
+                                + " failed: " + describeMigrationException(exception),
                         true
                 );
                 return null;
@@ -223,7 +231,10 @@ public final class PiSchemaSupport {
                 context.issue(
                         PiDecodeIssueCode.MIGRATION_FAILURE,
                         SCHEMA_VERSION_KEY,
-                        payloadPath + " missing migration path from version " + currentVersion + " to " + toVersion,
+                        missingMigrationPathMessage(
+                                payloadPath + " missing migration path from version " + currentVersion + " to " + toVersion,
+                                migrations
+                        ),
                         true
                 );
                 return null;
@@ -236,7 +247,7 @@ public final class PiSchemaSupport {
                         PiDecodeIssueCode.MIGRATION_FAILURE,
                         SCHEMA_VERSION_KEY,
                         payloadPath + " migration " + currentVersion + " -> " + migration.toVersion()
-                                + " failed: " + exception.getMessage(),
+                                + " failed: " + describeMigrationException(exception),
                         true
                 );
                 return null;
@@ -286,6 +297,14 @@ public final class PiSchemaSupport {
             listTag.add(StringTag.valueOf(value));
         }
         return Pair.of(key, (Tag) listTag);
+    }
+
+    public static <T> Pair<String, Tag> putField(String key, PiSerializerType<T> type, T value) {
+        return PiSchemaFieldCodecs.encode(key, requireSerializer(type), value);
+    }
+
+    public static <T> Pair<String, Tag> putField(String key, PiSerializer<T> serializer, T value) {
+        return PiSchemaFieldCodecs.encode(key, serializer, value);
     }
 
     public static Pair<String, Tag> putLong(String key, long value) {
@@ -426,6 +445,26 @@ public final class PiSchemaSupport {
         return parsed;
     }
 
+    public static <T> T getField(
+            CompoundTag tag,
+            String key,
+            PiSerializerType<T> type,
+            PiDecodeContext context,
+            T fallback
+    ) {
+        return PiSchemaFieldCodecs.decode(tag, key, requireSerializer(type), context, fallback);
+    }
+
+    public static <T> T getField(
+            CompoundTag tag,
+            String key,
+            PiSerializer<T> serializer,
+            PiDecodeContext context,
+            T fallback
+    ) {
+        return PiSchemaFieldCodecs.decode(tag, key, serializer, context, fallback);
+    }
+
     private static boolean validateSchemaId(CompoundTag tag, PiDecodeContext context, String expectedSchemaId) {
         Tag schemaId = tag.get(SCHEMA_ID_KEY);
         if (schemaId == null) {
@@ -476,5 +515,48 @@ public final class PiSchemaSupport {
             }
         }
         return indexed;
+    }
+
+    private static String missingMigrationPathMessage(String prefix, List<PiSchemaMigration> migrations) {
+        return prefix + "; declared steps: " + describeMigrations(migrations);
+    }
+
+    private static String describeMigrations(List<PiSchemaMigration> migrations) {
+        if (migrations.isEmpty()) {
+            return "none";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < migrations.size(); i++) {
+            PiSchemaMigration migration = migrations.get(i);
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append(migration.fromVersion()).append("->").append(migration.toVersion());
+        }
+        return builder.toString();
+    }
+
+    public static String describeException(RuntimeException exception) {
+        Objects.requireNonNull(exception, "exception");
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return exception.getClass().getSimpleName();
+        }
+        return message;
+    }
+
+    public static String describeException(RuntimeException exception, String blankMessageFallbackPrefix) {
+        Objects.requireNonNull(exception, "exception");
+        Objects.requireNonNull(blankMessageFallbackPrefix, "blankMessageFallbackPrefix");
+        return blankMessageFallbackPrefix + ": " + describeException(exception);
+    }
+
+    private static String describeMigrationException(RuntimeException exception) {
+        return describeException(exception);
+    }
+
+    private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type) {
+        Objects.requireNonNull(type, "type");
+        return PiSerializeServices.requireSerializer(type);
     }
 }

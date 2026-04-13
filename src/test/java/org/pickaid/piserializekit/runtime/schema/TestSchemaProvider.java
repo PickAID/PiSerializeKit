@@ -11,6 +11,7 @@ import org.pickaid.piserializekit.api.schema.PiSchemaProvider;
 import org.pickaid.piserializekit.api.schema.PiSchemaRegistry;
 import org.pickaid.piserializekit.api.schema.PiStateBinding;
 import org.pickaid.piserializekit.api.schema.PiSyncScope;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 public final class TestSchemaProvider implements PiSchemaProvider {
     public static final PiFieldKey VALUE = new PiFieldKey(0, "value");

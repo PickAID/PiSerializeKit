@@ -12,8 +12,8 @@ public final class PiPacketDecodeException extends IllegalStateException {
     private final PiDecodeResult result;
 
     public PiPacketDecodeException(ResourceLocation packetId, PiDecodeResult result) {
-        super("Failed to decode Pi packet " + Objects.requireNonNull(packetId, "packetId") + ": "
-                + Objects.requireNonNull(result, "result").summary());
+        super("Failed to decode Pi packet " + Objects.requireNonNull(packetId, "packetId") + " ["
+                + Objects.requireNonNull(result, "result").severityLabel() + "]: " + result.authorSummary());
         this.packetId = packetId;
         this.result = result;
     }

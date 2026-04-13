@@ -37,6 +37,20 @@ It should also become the typed serialization base for `PiDataGraph` counters, r
    `ServiceLoader`-backed runtime registries for schema and packet bindings, including packet-id lookup.
 10. `PiDecodeContext`
     structured decode diagnostics with field paths, fatal flags, and migration failure reporting.
+11. `PiRuntimeLookupException` / `PiRuntimeConflictException` / `PiRuntimeBootstrapException`
+    one runtime exception surface for missing bindings, conflicting registrations, and provider bootstrap failures, with minimal machine-readable context.
+
+## Authoring Guardrails
+
+Before using `@PiSyncModel` or `@PiPacket`, the current processor contract is:
+
+1. `@PiSyncModel.version` and `@PiPacket.version` must be `>= 1`;
+2. schema ids and packet ids must stay unique within the same compilation;
+3. `@PiSyncModel`, `@PiPacket`, and `@PiLivingService` must be top-level concrete classes;
+4. `@PiSyncModel` needs an accessible no-arg constructor that does not declare checked exceptions;
+5. packet constructors used for generated decode must match declared `@PiField` order and must not declare checked exceptions;
+6. `@PiField(serializer = ...)` providers need an accessible no-arg constructor that does not declare checked exceptions;
+7. `@PiAfterDecode`, `@PiSchemaUpgrade`, and `@PiPacketUpgrade` methods must not declare checked exceptions.
 
 ## Explicitly Not Heavy Yet
 

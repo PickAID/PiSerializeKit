@@ -5,14 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.netty.buffer.Unpooled;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
+import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;
 import org.pickaid.piserializekit.api.schema.PiFieldKey;
 
 class PiPacketApiSurfaceTest {
@@ -177,5 +180,52 @@ class PiPacketApiSurfaceTest {
         assertSame(binding, registry.require(ResourceLocation.fromNamespaceAndPath("test", "demo_registry")));
         assertThrows(NoSuchElementException.class, () -> registry.require(String.class));
         assertThrows(NoSuchElementException.class, () -> registry.require(ResourceLocation.fromNamespaceAndPath("test", "missing")));
+    }
+
+    @Test
+    void packetCodecStrictReadThrowsStructuredDecodeException() {
+        PiPacketCodec<String> codec = new PiPacketCodec<>() {
+            @Override
+            public void write(FriendlyByteBuf buffer, String value) {
+            }
+
+            @Override
+            public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                context.issue(PiDecodeIssueCode.INVALID_VALUE, "value", "boom", true);
+                return "";
+            }
+        };
+
+        PiPacketCodecDecodeException exception = assertThrows(
+                PiPacketCodecDecodeException.class,
+                () -> codec.read(new FriendlyByteBuf(Unpooled.buffer()))
+        );
+
+        assertEquals("value -> boom", exception.result().summary());
+        assertEquals("Failed to decode Pi packet payload [fatal]: value -> boom", exception.getMessage());
+    }
+
+    @Test
+    void packetCodecStrictReadWrapsThrownRuntimeExceptionIntoStructuredDecodeException() {
+        PiPacketCodec<String> codec = new PiPacketCodec<>() {
+            @Override
+            public void write(FriendlyByteBuf buffer, String value) {
+            }
+
+            @Override
+            public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                throw new IllegalStateException("   ");
+            }
+        };
+
+        PiPacketCodecDecodeException exception = assertThrows(
+                PiPacketCodecDecodeException.class,
+                () -> codec.read(new FriendlyByteBuf(Unpooled.buffer()))
+        );
+
+        assertTrue(exception.result().hasFatal());
+        assertEquals("$", exception.result().issues().get(0).path());
+        assertEquals(PiDecodeIssueCode.SERIALIZER_FAILURE, exception.result().issues().get(0).code());
+        assertEquals("packet decode failed: IllegalStateException", exception.result().issues().get(0).message());
     }
 }

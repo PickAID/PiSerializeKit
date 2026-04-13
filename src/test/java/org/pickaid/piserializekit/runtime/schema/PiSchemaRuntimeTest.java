@@ -31,6 +31,11 @@ import org.pickaid.piserializekit.api.schema.PiSyncSchema;
 import org.pickaid.piserializekit.api.schema.PiSyncScope;
 import org.pickaid.piserializekit.api.service.PiSerializer;
 import org.pickaid.piserializekit.api.service.PiSerializers;
+import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaField;
+import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaFieldCodecs;
+import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaSerializers;
+import org.pickaid.piserializekit.runtime.schema.registry.PiSchemas;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 import org.pickaid.piserializekit.runtime.service.PiBuiltInSerializers;
 import org.pickaid.piserializekit.runtime.service.PiSerializeRuntime;
 
@@ -338,6 +343,17 @@ class PiSchemaRuntimeTest {
         }
     }
 
+    private static final class ThrowingLegacyBinding extends LegacyBinding {
+        @Override
+        public List<PiSchemaMigration> migrations() {
+            return List.of(PiSchemaMigration.step(1, 2, ThrowingLegacyBinding::upgradeV1ToV2));
+        }
+
+        private static CompoundTag upgradeV1ToV2(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {
+            throw new IllegalStateException();
+        }
+    }
+
     private static PiSerializeRuntime createRuntime() {
         PiSerializeRuntime runtime = new PiSerializeRuntime();
         PiBuiltInSerializers.install(runtime);
@@ -492,6 +508,68 @@ class PiSchemaRuntimeTest {
     }
 
     @Test
+    void serializerBackedFieldHelpersRoundTripScalarTypes() {
+        UUID runId = UUID.fromString("123e4567-e89b-12d3-a456-426614174010");
+        ResourceLocation location = ResourceLocation.parse("test:trial");
+        CompoundTag tag = PiSchemaSupport.tagOf(
+                PiSchemaSupport.putField("active", PiSerializers.BOOLEAN, true),
+                PiSchemaSupport.putField("title", PiSerializers.STRING, "boss"),
+                PiSchemaSupport.putField("run_id", PiSerializers.UUID, runId),
+                PiSchemaSupport.putField("trial", PiSerializers.RESOURCE_LOCATION, location)
+        );
+        PiDecodeContext context = PiDecodeContext.strict();
+
+        assertTrue(PiSchemaSupport.getField(tag, "active", PiSerializers.BOOLEAN, context, false));
+        assertEquals("boss", PiSchemaSupport.getField(tag, "title", PiSerializers.STRING, context, "fallback"));
+        assertEquals(runId, PiSchemaSupport.getField(tag, "run_id", PiSerializers.UUID, context, new UUID(0L, 0L)));
+        assertEquals(
+                location,
+                PiSchemaSupport.getField(
+                        tag,
+                        "trial",
+                        PiSerializers.RESOURCE_LOCATION,
+                        context,
+                        ResourceLocation.parse("test:fallback")
+                )
+        );
+        assertTrue(context.result().issues().isEmpty());
+    }
+
+    @Test
+    void serializerBackedFieldHelpersKeepFallbacksOnMissingPayloads() {
+        CompoundTag tag = new CompoundTag();
+        PiDecodeContext context = PiDecodeContext.strict();
+        UUID fallbackUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174011");
+        ResourceLocation fallbackLocation = ResourceLocation.parse("test:fallback");
+
+        assertTrue(PiSchemaSupport.getField(tag, "active", PiSerializers.BOOLEAN, context, true));
+        assertEquals("fallback", PiSchemaSupport.getField(tag, "title", PiSerializers.STRING, context, "fallback"));
+        assertEquals(fallbackUuid, PiSchemaSupport.getField(tag, "run_id", PiSerializers.UUID, context, fallbackUuid));
+        assertEquals(
+                fallbackLocation,
+                PiSchemaSupport.getField(tag, "trial", PiSerializers.RESOURCE_LOCATION, context, fallbackLocation)
+        );
+        assertEquals(4, context.result().issues().size());
+        assertEquals("active", context.result().issues().get(0).path());
+        assertEquals("title", context.result().issues().get(1).path());
+        assertEquals("run_id", context.result().issues().get(2).path());
+        assertEquals("trial", context.result().issues().get(3).path());
+        assertFalse(context.result().hasFatal());
+    }
+
+    @Test
+    void serializerBackedFieldHelpersSupportLocalCustomSerializerInstances() {
+        var trimmed = new TrimmedStringCodec().serializer();
+        CompoundTag tag = PiSchemaSupport.tagOf(
+                PiSchemaSupport.putField("label", trimmed, "  boss  ")
+        );
+        PiDecodeContext context = PiDecodeContext.strict();
+
+        assertEquals("boss", PiSchemaSupport.getField(tag, "label", trimmed, context, "fallback"));
+        assertTrue(context.result().issues().isEmpty());
+    }
+
+    @Test
     void generatedSchemaRoundTripsNestedCollectionsAndCustomFieldThroughFullAndDelta() {
         GeneratedComplexState state = new GeneratedComplexState();
         state.names.add("alice");
@@ -606,6 +684,46 @@ class PiSchemaRuntimeTest {
     }
 
     @Test
+    void preparePayloadReportsDeclaredStepsWhenMigrationChainIsIncomplete() {
+        BrokenLegacyBinding binding = new BrokenLegacyBinding();
+        PiDecodeContext context = PiDecodeContext.strict();
+        CompoundTag legacyPayload = PiSchemaSupport.tagWithHeader(
+                LEGACY_SCHEMA_ID,
+                1,
+                PiSchemaSupport.putInt("count", 7)
+        );
+
+        CompoundTag migrated = PiSchemaSupport.preparePayload(legacyPayload, context, binding, PiSchemaPayloadKind.FULL);
+
+        assertNull(migrated);
+        assertTrue(context.result().hasFatal());
+        assertEquals(
+                "missing schema migration path from version 2 to 3; declared steps: 1->2",
+                context.result().issues().get(0).message()
+        );
+    }
+
+    @Test
+    void preparePayloadReportsExceptionTypeWhenMigrationThrowsWithoutMessage() {
+        ThrowingLegacyBinding binding = new ThrowingLegacyBinding();
+        PiDecodeContext context = PiDecodeContext.strict();
+        CompoundTag legacyPayload = PiSchemaSupport.tagWithHeader(
+                LEGACY_SCHEMA_ID,
+                1,
+                PiSchemaSupport.putInt("count", 7)
+        );
+
+        CompoundTag migrated = PiSchemaSupport.preparePayload(legacyPayload, context, binding, PiSchemaPayloadKind.FULL);
+
+        assertNull(migrated);
+        assertTrue(context.result().hasFatal());
+        assertEquals(
+                "schema migration 1 -> 2 failed: IllegalStateException",
+                context.result().issues().get(0).message()
+        );
+    }
+
+    @Test
     void schemaSerializerThrowsStructuredDecodeException() {
         PiSerializer<TestSchemaProvider.TestState> serializer = PiSchemaSerializers.forState(TestSchemaProvider.TestState.class);
         CompoundTag tag = PiSchemaSupport.headerTag(TestSchemaProvider.SCHEMA_ID, TestSchemaProvider.SCHEMA_VERSION);
@@ -616,7 +734,7 @@ class PiSchemaRuntimeTest {
         assertEquals(1, exception.result().issues().size());
         assertEquals(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, exception.result().issues().get(0).code());
         assertEquals("value -> missing int", exception.result().summary());
-        assertEquals("Failed to decode Pi schema test:schema_provider_state: value -> missing int", exception.getMessage());
+        assertEquals("Failed to decode Pi schema test:schema_provider_state [non-fatal]: value -> missing int", exception.getMessage());
     }
 
     @Test
@@ -664,6 +782,23 @@ class PiSchemaRuntimeTest {
         assertEquals(Set.of("fresh"), restored.checkpoints);
         assertEquals(99, restored.menuPage);
         assertTrue(context.result().issues().isEmpty());
+    }
+
+    @Test
+    void defaultPersistedDeltaFiltersNonPersistentFields() {
+        PiStateBinding<ManualPersistedState> binding = new ManualPersistedBinding();
+        ManualPersistedState state = new ManualPersistedState();
+        state.checkpoints.add("fresh");
+        state.menuPage = 3;
+        PiDirtySet dirty = new PiDirtySet()
+                .mark(CHECKPOINTS)
+                .mark(MENU_PAGE);
+
+        CompoundTag persistedDelta = binding.writePersistedDelta(state, dirty);
+
+        assertTrue(persistedDelta.contains(PiSchemaSupport.SCHEMA_ID_KEY));
+        assertTrue(persistedDelta.contains("checkpoints"));
+        assertFalse(persistedDelta.contains("menu_page"));
     }
 
     @Test

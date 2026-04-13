@@ -1,10 +1,14 @@
 package org.pickaid.piserializekit.runtime.service;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.resources.ResourceLocation;
+import org.pickaid.piserializekit.api.runtime.PiRuntimeConflictException;
 import org.pickaid.piserializekit.api.service.PiSerializeService;
 import org.pickaid.piserializekit.api.service.PiSerializer;
 import org.pickaid.piserializekit.api.service.PiSerializerType;
@@ -16,10 +20,31 @@ public final class PiSerializeRuntime implements PiSerializeService {
     public <T> void register(PiSerializerType<T> type, PiSerializer<T> serializer) {
         Objects.requireNonNull(type, "type");
         Objects.requireNonNull(serializer, "serializer");
-        Entry<?> previous = serializers.putIfAbsent(type.id(), new Entry<>(canonicalType(type.javaType()), serializer));
-        if (previous != null) {
-            throw new IllegalStateException("Duplicate Pi serializer registration for " + type.id());
+        Class<T> canonicalJavaType = canonicalType(type.javaType());
+        Entry<T> incoming = new Entry<>(canonicalJavaType, serializer);
+        Entry<?> previous = serializers.putIfAbsent(type.id(), incoming);
+        if (previous == null) {
+            return;
         }
+        if (previous.javaType().equals(canonicalJavaType) && previous.serializer() == serializer) {
+            return;
+        }
+        if (previous.javaType().equals(canonicalJavaType)) {
+            throw new PiRuntimeConflictException(
+                    "serializer-id",
+                    type.id().toString(),
+                    "Duplicate Pi serializer registration for " + type.id()
+                            + "; java type " + canonicalJavaType.getName()
+                            + " is already registered. Use PiSerializeServices.withScope(...) for overrides instead of re-registering the same id and type."
+            );
+        }
+        throw new PiRuntimeConflictException(
+                "serializer-id",
+                type.id().toString(),
+                "Duplicate Pi serializer registration for " + type.id()
+                        + "; existing java type " + previous.javaType().getName()
+                        + ", conflicting java type " + canonicalJavaType.getName()
+        );
     }
 
     @Override
@@ -34,6 +59,44 @@ public final class PiSerializeRuntime implements PiSerializeService {
             return Optional.empty();
         }
         return Optional.of(cast(entry.serializer()));
+    }
+
+    @Override
+    public String describeMissingSerializer(PiSerializerType<?> type) {
+        Objects.requireNonNull(type, "type");
+        Entry<?> entry = serializers.get(type.id());
+        if (entry != null) {
+            return "Missing Pi serializer for " + type.id() + " / " + type.javaType().getName()
+                    + "; serializer id is registered with java type " + entry.javaType().getName();
+        }
+        return "Missing Pi serializer for " + type.id() + " / " + type.javaType().getName()
+                + "; known serializer ids: " + describeKnownSerializerIds()
+                + emptyRuntimeHint();
+    }
+
+    @Override
+    public List<ResourceLocation> serializerIds() {
+        ArrayList<ResourceLocation> ids = new ArrayList<>(serializers.keySet());
+        ids.sort(Comparator.comparing(ResourceLocation::toString));
+        return List.copyOf(ids);
+    }
+
+    @Override
+    public List<Class<?>> serializerJavaTypes() {
+        ArrayList<Class<?>> types = new ArrayList<>(serializers.size());
+        for (Entry<?> entry : serializers.values()) {
+            types.add(entry.javaType());
+        }
+        types.sort(Comparator.comparing(Class::getName));
+        ArrayList<Class<?>> deduped = new ArrayList<>(types.size());
+        Class<?> previous = null;
+        for (Class<?> type : types) {
+            if (!type.equals(previous)) {
+                deduped.add(type);
+                previous = type;
+            }
+        }
+        return List.copyOf(deduped);
     }
 
     @SuppressWarnings("unchecked")
@@ -74,6 +137,30 @@ public final class PiSerializeRuntime implements PiSerializeService {
     @SuppressWarnings("unchecked")
     private static <T> PiSerializer<T> cast(PiSerializer<?> serializer) {
         return (PiSerializer<T>) serializer;
+    }
+
+    private String describeKnownSerializerIds() {
+        if (serializers.isEmpty()) {
+            return "<none>";
+        }
+        ArrayList<String> ids = new ArrayList<>(serializers.size());
+        for (ResourceLocation id : serializers.keySet()) {
+            ids.add(id.toString());
+        }
+        ids.sort(String::compareTo);
+        int limit = Math.min(6, ids.size());
+        String joined = String.join(", ", ids.subList(0, limit));
+        if (ids.size() > limit) {
+            return joined + ", +" + (ids.size() - limit) + " more";
+        }
+        return joined;
+    }
+
+    private String emptyRuntimeHint() {
+        if (!serializers.isEmpty()) {
+            return "";
+        }
+        return "; serializer runtime is empty. Install built-ins or register serializers before resolving author-facing codec ids.";
     }
 
     private record Entry<T>(Class<T> javaType, PiSerializer<T> serializer) {

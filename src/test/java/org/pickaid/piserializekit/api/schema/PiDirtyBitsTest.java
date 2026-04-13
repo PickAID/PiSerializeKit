@@ -8,7 +8,7 @@ import java.util.List;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
-import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 class PiDirtyBitsTest {
     private static final PiFieldKey TRACKING = new PiFieldKey(0, "tracking");

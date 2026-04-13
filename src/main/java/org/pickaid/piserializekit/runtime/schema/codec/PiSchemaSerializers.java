@@ -1,4 +1,4 @@
-package org.pickaid.piserializekit.runtime.schema;
+package org.pickaid.piserializekit.runtime.schema.codec;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -17,6 +17,7 @@ import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
 import org.pickaid.piserializekit.api.schema.PiStateBinding;
 import org.pickaid.piserializekit.api.service.PiSerializer;
 import org.pickaid.piserializekit.runtime.packet.PiPacketSupport;
+import org.pickaid.piserializekit.runtime.schema.registry.PiSchemas;
 
 /**
  * Serializer adapters backed by generated Pi schema bindings.
@@ -40,6 +41,11 @@ public final class PiSchemaSerializers {
             @Override
             public T decode(CompoundTag tag) {
                 return decodeState(tag, binding(stateType));
+            }
+
+            @Override
+            public T decodeInto(CompoundTag tag, T current) {
+                return decodeState(tag, binding(stateType), PiDecodeContext.strict(), current);
             }
         };
         PiPacketCodec<T> packetCodec = new PiPacketCodec<>() {
@@ -104,7 +110,7 @@ public final class PiSchemaSerializers {
 
     private static <T> T decodeState(CompoundTag tag, PiStateBinding<T> binding) {
         PiDecodeContext context = PiDecodeContext.strict();
-        T state = decodeState(tag, binding, context);
+        T state = decodeState(tag, binding, context, null);
         if (context.result().hasIssues()) {
             throw new PiDecodeException(binding.schemaId(), context.result());
         }
@@ -112,11 +118,12 @@ public final class PiSchemaSerializers {
     }
 
     private static <T> T decodeState(CompoundTag tag, PiStateBinding<T> binding, PiDecodeContext context) {
-        T state = binding.newState();
-        CompoundTag payload = PiSchemaSupport.preparePayload(tag, context, binding, PiSchemaPayloadKind.FULL);
-        if (payload != null) {
-            binding.loadFull(state, payload, context);
-        }
+        return decodeState(tag, binding, context, null);
+    }
+
+    private static <T> T decodeState(CompoundTag tag, PiStateBinding<T> binding, PiDecodeContext context, T current) {
+        T state = current != null ? current : binding.newState();
+        binding.loadFull(state, tag, context);
         return state;
     }
 }

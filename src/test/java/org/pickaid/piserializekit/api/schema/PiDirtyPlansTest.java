@@ -9,7 +9,8 @@ import java.util.Set;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
-import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;
+import org.pickaid.piserializekit.api.service.PiSerializers;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 class PiDirtyPlansTest {
     private static final PiFieldKey TRACKING = new PiFieldKey(0, "tracking");
@@ -56,9 +57,9 @@ class PiDirtyPlansTest {
             return PiSchemaSupport.tagWithHeader(
                     schemaId(),
                     version(),
-                    PiSchemaSupport.putInt("tracking", self.tracking),
-                    PiSchemaSupport.putInt("owner", self.owner),
-                    PiSchemaSupport.putInt("global", self.global)
+                    PiSchemaSupport.putField("tracking", PiSerializers.INT, self.tracking),
+                    PiSchemaSupport.putField("owner", PiSerializers.INT, self.owner),
+                    PiSchemaSupport.putField("global", PiSerializers.INT, self.global)
             );
         }
 
@@ -67,21 +68,16 @@ class PiDirtyPlansTest {
         }
 
         @Override
-        public CompoundTag saveClientView(DirtyState self) {
-            return saveFull(self);
-        }
-
-        @Override
         public CompoundTag writeDelta(DirtyState self, PiDirtySet dirtySet) {
             CompoundTag tag = PiSchemaSupport.headerTag(schemaId(), version());
             if (dirtySet.contains(TRACKING)) {
-                tag.putInt("tracking", self.tracking);
+                tag.put("tracking", PiSchemaSupport.putField("tracking", PiSerializers.INT, self.tracking).getSecond());
             }
             if (dirtySet.contains(OWNER)) {
-                tag.putInt("owner", self.owner);
+                tag.put("owner", PiSchemaSupport.putField("owner", PiSerializers.INT, self.owner).getSecond());
             }
             if (dirtySet.contains(GLOBAL)) {
-                tag.putInt("global", self.global);
+                tag.put("global", PiSchemaSupport.putField("global", PiSerializers.INT, self.global).getSecond());
             }
             return tag;
         }
@@ -149,6 +145,40 @@ class PiDirtyPlansTest {
 
         assertEquals(List.of(TRACKING_FIELD, GLOBAL_FIELD), plan.descriptors());
         assertEquals(Set.of(TRACKING, GLOBAL), plan.keys());
+    }
+
+    @Test
+    void defaultClientViewUsesClientProjection() {
+        DirtyState state = new DirtyState();
+        state.tracking = 4;
+        state.owner = 9;
+        state.global = 12;
+
+        CompoundTag client = BINDING.saveClientView(state);
+
+        assertTrue(client.contains(PiSchemaSupport.SCHEMA_ID_KEY));
+        assertTrue(client.contains("tracking"));
+        assertFalse(client.contains("owner"));
+        assertTrue(client.contains("global"));
+    }
+
+    @Test
+    void defaultClientDeltaUsesClientProjection() {
+        DirtyState state = new DirtyState();
+        state.tracking = 4;
+        state.owner = 9;
+        state.global = 12;
+        PiDirtySet dirty = new PiDirtySet()
+                .mark(TRACKING)
+                .mark(OWNER)
+                .mark(GLOBAL);
+
+        CompoundTag delta = BINDING.writeClientDelta(state, dirty);
+
+        assertTrue(delta.contains(PiSchemaSupport.SCHEMA_ID_KEY));
+        assertTrue(delta.contains("tracking"));
+        assertFalse(delta.contains("owner"));
+        assertTrue(delta.contains("global"));
     }
 
     @Test

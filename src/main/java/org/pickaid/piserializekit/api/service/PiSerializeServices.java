@@ -1,10 +1,14 @@
 package org.pickaid.piserializekit.api.service;
 
+import java.util.List;
 import java.util.ArrayDeque;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.function.Supplier;
+import net.minecraft.resources.ResourceLocation;
+import org.pickaid.piserializekit.api.runtime.PiRuntimeLookupException;
+import org.pickaid.piserializekit.runtime.PiRuntimeBootstrapSupport;
 
 public final class PiSerializeServices {
     private static volatile PiSerializeService service;
@@ -32,7 +36,60 @@ public final class PiSerializeServices {
      * Resolves the current serializer service or fails when neither a scoped nor global service exists.
      */
     public static PiSerializeService require() {
-        return find().orElseThrow(() -> new IllegalStateException("PiSerializeKit service has not been installed"));
+        return find().orElseThrow(() -> new PiRuntimeLookupException(
+                "serializer-service",
+                "default",
+                "PiSerializeKit service has not been installed; no PiSerializeServiceProvider entries were loaded. "
+                        + "Install a serializer service explicitly or ensure runtime provider resources are on the classpath."
+        ));
+    }
+
+    /**
+     * Resolves one serializer from the current service or fails with an author-facing diagnostic.
+     */
+    public static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type) {
+        Objects.requireNonNull(type, "type");
+        return require().require(type);
+    }
+
+    /**
+     * Finds one serializer from the current service without throwing when it is absent.
+     */
+    public static <T> Optional<PiSerializer<T>> findSerializer(PiSerializerType<T> type) {
+        Objects.requireNonNull(type, "type");
+        return find().flatMap(service -> service.lookup(type));
+    }
+
+    /**
+     * Finds one serializer from the current service by id and java type.
+     */
+    public static <T> Optional<PiSerializer<T>> findSerializer(ResourceLocation id, Class<T> javaType) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(javaType, "javaType");
+        return findSerializer(new PiSerializerType<>(id, javaType));
+    }
+
+    /**
+     * Resolves one serializer from the current service by id and java type or fails with an author-facing diagnostic.
+     */
+    public static <T> PiSerializer<T> requireSerializer(ResourceLocation id, Class<T> javaType) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(javaType, "javaType");
+        return requireSerializer(new PiSerializerType<>(id, javaType));
+    }
+
+    /**
+     * Returns known serializer ids from the current service in stable order.
+     */
+    public static List<ResourceLocation> serializerIds() {
+        return require().serializerIds();
+    }
+
+    /**
+     * Returns known serializer java types from the current service in stable order.
+     */
+    public static List<Class<?>> serializerJavaTypes() {
+        return require().serializerJavaTypes();
     }
 
     /**
@@ -82,13 +139,14 @@ public final class PiSerializeServices {
             if (service != null) {
                 return service;
             }
-            PiSerializeServiceProvider provider = ServiceLoader.load(PiSerializeServiceProvider.class)
-                    .findFirst()
-                    .orElse(null);
-            if (provider == null) {
+            PiSerializeService created = PiRuntimeBootstrapSupport.createFromFirstProvider(
+                    "default Pi serializer service",
+                    ServiceLoader.load(PiSerializeServiceProvider.class),
+                    PiSerializeServiceProvider::create
+            );
+            if (created == null) {
                 return null;
             }
-            PiSerializeService created = Objects.requireNonNull(provider.create(), "provider.create()");
             service = created;
             return created;
         }

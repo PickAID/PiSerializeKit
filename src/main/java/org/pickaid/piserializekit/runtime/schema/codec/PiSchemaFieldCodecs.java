@@ -1,4 +1,4 @@
-package org.pickaid.piserializekit.runtime.schema;
+package org.pickaid.piserializekit.runtime.schema.codec;
 
 import com.mojang.datafixers.util.Pair;
 import java.util.Objects;
@@ -9,30 +9,55 @@ import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;
 import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
 import org.pickaid.piserializekit.api.schema.PiStateBinding;
 import org.pickaid.piserializekit.api.service.PiSerializer;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 /**
  * Generic serializer-backed field codecs used by generated schemas.
  */
 public final class PiSchemaFieldCodecs {
-    private static final String ROOT_VALUE_KEY = "__pi_value";
-
     private PiSchemaFieldCodecs() {
     }
 
     public static <T> Pair<String, Tag> writeField(PiSchemaField<T> field, T value) {
         Objects.requireNonNull(field, "field");
-        return encode(field.key(), field.serializer(), value);
+        return Pair.of(field.key(), encodeField(field, value));
+    }
+
+    public static <T> void writeField(CompoundTag root, PiSchemaField<T> field, T value) {
+        Objects.requireNonNull(root, "root");
+        Objects.requireNonNull(field, "field");
+        root.put(field.key(), encodeField(field, value));
     }
 
     public static <T> Pair<String, Tag> encode(String key, PiSerializer<T> serializer, T value) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(serializer, "serializer");
-        return Pair.of(key, serializer.nbtCodec().encode(value).copy());
+        return Pair.of(key, encodeValue(serializer, value));
+    }
+
+    public static <T> Tag encodeField(PiSchemaField<T> field, T value) {
+        Objects.requireNonNull(field, "field");
+        return encodeValue(field.serializer(), value);
+    }
+
+    public static <T> Tag encodeValue(PiSerializer<T> serializer, T value) {
+        Objects.requireNonNull(serializer, "serializer");
+        return serializer.nbtCodec().encodeTag(value);
     }
 
     public static <T> T readField(CompoundTag root, PiSchemaField<T> field, PiDecodeContext context, T fallback) {
         Objects.requireNonNull(field, "field");
         return decode(root, field.key(), field.serializer(), context, fallback);
+    }
+
+    public static <T> T readFieldOrNull(CompoundTag root, PiSchemaField<T> field, PiDecodeContext context) {
+        Objects.requireNonNull(field, "field");
+        return decode(root, field.key(), field.serializer(), context, null);
+    }
+
+    public static <T> T readFieldInto(CompoundTag root, PiSchemaField<T> field, PiDecodeContext context, T current) {
+        Objects.requireNonNull(field, "field");
+        return decodeInto(root, field.key(), field.serializer(), context, current);
     }
 
     public static <T> T decode(CompoundTag root, String key, PiSerializer<T> serializer, PiDecodeContext context, T fallback) {
@@ -42,36 +67,70 @@ public final class PiSchemaFieldCodecs {
         Objects.requireNonNull(context, "context");
         Tag raw = root.get(key);
         if (raw == null) {
+            if (context.hasIssue(key)) {
+                return fallback;
+            }
             context.issue(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, key, "missing field payload", false);
             return fallback;
         }
-        if (raw instanceof CompoundTag compound) {
-            return decodePayload(key, compound, serializer, context, fallback, "field payload");
+        return decodePayload(key, raw, serializer, context, fallback, raw instanceof CompoundTag ? "field payload" : "legacy field payload");
+    }
+
+    public static <T> T decodeInto(CompoundTag root, String key, PiSerializer<T> serializer, PiDecodeContext context, T current) {
+        Objects.requireNonNull(root, "root");
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(serializer, "serializer");
+        Objects.requireNonNull(context, "context");
+        Tag raw = root.get(key);
+        if (raw == null) {
+            if (context.hasIssue(key)) {
+                return current;
+            }
+            context.issue(PiDecodeIssueCode.MISSING_FIELD_PAYLOAD, key, "missing field payload", false);
+            return current;
         }
-        CompoundTag wrapped = new CompoundTag();
-        wrapped.put(ROOT_VALUE_KEY, raw.copy());
-        return decodePayload(key, wrapped, serializer, context, fallback, "legacy field payload");
+        return decodePayloadInto(key, raw, serializer, context, current, raw instanceof CompoundTag ? "field payload" : "legacy field payload");
     }
 
     private static <T> T decodePayload(
             String key,
-            CompoundTag payload,
+            Tag payload,
             PiSerializer<T> serializer,
             PiDecodeContext context,
             T fallback,
             String label
     ) {
         try {
-            return serializer.nbtCodec().decode(payload);
+            return serializer.nbtCodec().decodeTag(payload);
         } catch (RuntimeException exception) {
-            String message = exception.getMessage();
             context.issue(
                     PiDecodeIssueCode.SERIALIZER_FAILURE,
                     key,
-                    "failed to decode " + label + (message == null ? "" : ": " + message),
+                    PiSchemaSupport.describeException(exception, "failed to decode " + label),
                     false
             );
             return fallback;
+        }
+    }
+
+    private static <T> T decodePayloadInto(
+            String key,
+            Tag payload,
+            PiSerializer<T> serializer,
+            PiDecodeContext context,
+            T current,
+            String label
+    ) {
+        try {
+            return serializer.nbtCodec().decodeIntoTag(payload, current);
+        } catch (RuntimeException exception) {
+            context.issue(
+                    PiDecodeIssueCode.SERIALIZER_FAILURE,
+                    key,
+                    PiSchemaSupport.describeException(exception, "failed to decode " + label),
+                    false
+            );
+            return current;
         }
     }
 

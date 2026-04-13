@@ -9,8 +9,8 @@ import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;
 import org.pickaid.piserializekit.api.schema.PiSchemaMigration;
 import org.pickaid.piserializekit.api.service.PiSerializer;
-import org.pickaid.piserializekit.runtime.schema.PiSchemaFieldCodecs;
-import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;
+import org.pickaid.piserializekit.runtime.schema.codec.PiSchemaFieldCodecs;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 /**
  * Packet decode helpers shared by generated bindings and packet serializers.
@@ -26,11 +26,10 @@ public final class PiPacketSupport {
         try {
             return reader.get();
         } catch (RuntimeException exception) {
-            String message = exception.getMessage();
             context.issue(
                     PiDecodeIssueCode.SERIALIZER_FAILURE,
                     path,
-                    message == null ? "packet decode failed" : message,
+                    PiSchemaSupport.describeException(exception, "packet decode failed"),
                     true
             );
             return fallback;
@@ -49,17 +48,41 @@ public final class PiPacketSupport {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(serializer, "serializer");
         Objects.requireNonNull(context, "context");
+        PiDecodeContext fieldContext = context.child(path);
         if (legacy) {
             if (!buffer.isReadable()) {
                 return null;
             }
-            try {
-                return serializer.packetCodec().read(buffer);
-            } catch (RuntimeException exception) {
-                return null;
-            }
         }
-        return serializer.packetCodec().read(buffer, context.child(path));
+        return readNestedValue(buffer, serializer, fieldContext, legacy ? null : fallback);
+    }
+
+    /**
+     * Decodes one nested packet value while converting raw runtime failures into structured issues.
+     *
+     * <p>This is used by composite serializers so list/set/map/optional/array packet paths stay on
+     * the same diagnostics model as generated packet bindings.</p>
+     */
+    public static <T> T readNestedValue(
+            FriendlyByteBuf buffer,
+            PiSerializer<T> serializer,
+            PiDecodeContext context,
+            T fallback
+    ) {
+        Objects.requireNonNull(buffer, "buffer");
+        Objects.requireNonNull(serializer, "serializer");
+        Objects.requireNonNull(context, "context");
+        try {
+            return serializer.packetCodec().read(buffer, context);
+        } catch (RuntimeException exception) {
+            context.issue(
+                    PiDecodeIssueCode.SERIALIZER_FAILURE,
+                    "",
+                    PiSchemaSupport.describeException(exception),
+                    true
+            );
+            return fallback;
+        }
     }
 
     public static <T> void writePayloadField(
@@ -77,13 +100,12 @@ public final class PiPacketSupport {
             return;
         }
         try {
-            payload.put(key, PiSchemaFieldCodecs.encode(key, serializer, value).getSecond());
+            payload.put(key, PiSchemaFieldCodecs.encodeValue(serializer, value));
         } catch (RuntimeException exception) {
-            String message = exception.getMessage();
             context.issue(
                     PiDecodeIssueCode.SERIALIZER_FAILURE,
                     key,
-                    message == null ? "failed to encode packet payload field" : message,
+                    PiSchemaSupport.describeException(exception, "failed to encode packet payload field"),
                     true
             );
         }

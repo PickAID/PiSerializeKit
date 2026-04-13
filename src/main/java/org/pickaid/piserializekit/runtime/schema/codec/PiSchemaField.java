@@ -1,4 +1,4 @@
-package org.pickaid.piserializekit.runtime.schema;
+package org.pickaid.piserializekit.runtime.schema.codec;
 
 import java.util.Objects;
 import org.pickaid.piserializekit.api.schema.PiFieldDescriptor;

@@ -13,7 +13,7 @@ import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
 import org.pickaid.piserializekit.api.schema.PiSyncScope;
 import org.pickaid.piserializekit.api.service.PiSerializeServices;
 import org.pickaid.piserializekit.api.service.PiSerializers;
-import org.pickaid.piserializekit.runtime.schema.PiSchemaSupport;
+import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 @PiPacket(version = 2)
 public final class LegacySkillPacket extends PiServerPacket {

@@ -37,6 +37,20 @@
    基于 `ServiceLoader` 的 schema / packet runtime registry，可按类型或 packet id 查询。
 10. `PiDecodeContext`
     结构化 decode 诊断收集器，支持字段路径、fatal 标记与 migration 失败信息。
+11. `PiRuntimeLookupException` / `PiRuntimeConflictException` / `PiRuntimeBootstrapException`
+    统一的 runtime 异常模型，用于缺失绑定、冲突注册与 provider bootstrap 失败，并暴露最小 machine-readable 上下文。
+
+## 作者侧硬约束
+
+第一次写 `@PiSyncModel` / `@PiPacket` 前，当前需要明确这些规则：
+
+1. `@PiSyncModel.version` 与 `@PiPacket.version` 必须 `>= 1`；
+2. schema id 与 packet id 在同一轮编译内必须唯一，重复声明会编译期失败；
+3. `@PiSyncModel`、`@PiPacket`、`@PiLivingService` 必须是 top-level concrete class；
+4. `@PiSyncModel` 需要可访问的无参构造器，且该构造器不能声明 checked exception；
+5. `@PiPacket` 用于生成 decode 的构造器必须和 `@PiField` 顺序匹配，且不能声明 checked exception；
+6. `@PiField(serializer = ...)` provider 需要可访问的无参构造器，且不能声明 checked exception；
+7. `@PiAfterDecode`、`@PiSchemaUpgrade`、`@PiPacketUpgrade` 方法不能声明 checked exception。
 
 ## 当前明确不做满
 

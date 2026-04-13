@@ -7,6 +7,11 @@ import java.lang.annotation.Target;
 
 /**
  * Marks one author-defined schema upgrade method on a {@link PiSyncModel} type.
+ *
+ * <p>Expected method shape:
+ * {@code static CompoundTag method(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context)}.
+ * Annotated methods must not throw checked exceptions because generated
+ * migrations invoke them directly.</p>
  */
 @Retention(RetentionPolicy.SOURCE)
 @Target(ElementType.METHOD)

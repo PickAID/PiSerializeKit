@@ -17,7 +17,8 @@ public final class PiDecodeException extends IllegalStateException {
      * @param result collected decode result
      */
     public PiDecodeException(ResourceLocation schemaId, PiDecodeResult result) {
-        super("Failed to decode Pi schema " + Objects.requireNonNull(schemaId, "schemaId") + ": " + Objects.requireNonNull(result, "result").summary());
+        super("Failed to decode Pi schema " + Objects.requireNonNull(schemaId, "schemaId") + " ["
+                + Objects.requireNonNull(result, "result").severityLabel() + "]: " + result.authorSummary());
         this.schemaId = schemaId;
         this.result = result;
     }
