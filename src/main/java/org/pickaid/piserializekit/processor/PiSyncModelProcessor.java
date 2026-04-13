@@ -48,6 +48,7 @@ import org.pickaid.piserializekit.processor.support.PiProcessorMigrationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorNames;
 import org.pickaid.piserializekit.processor.support.PiProcessorPacketSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorServiceFileSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSerializerSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
 
@@ -1317,66 +1318,30 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     }
 
     private void writePacketProviderServiceFile() {
-        if (packetProviderTypes.isEmpty()) {
-            return;
-        }
-        try {
-            FileObject file = processingEnv.getFiler().createResource(
-                    StandardLocation.CLASS_OUTPUT,
-                    "",
-                    "META-INF/services/" + PACKET_PROVIDER
-            );
-            try (Writer writer = file.openWriter()) {
-                for (String providerType : packetProviderTypes) {
-                    writer.write(providerType);
-                    writer.write("\n");
-                }
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate Pi packet provider service file", e);
-        }
+        PiProcessorServiceFileSupport.writeServiceFile(
+                processingEnv,
+                packetProviderTypes,
+                PACKET_PROVIDER,
+                "Failed to generate Pi packet provider service file"
+        );
     }
 
     private void writeProviderServiceFile() {
-        if (providerTypes.isEmpty()) {
-            return;
-        }
-        try {
-            FileObject file = processingEnv.getFiler().createResource(
-                    StandardLocation.CLASS_OUTPUT,
-                    "",
-                    "META-INF/services/org.pickaid.piserializekit.api.schema.PiSchemaProvider"
-            );
-            try (Writer writer = file.openWriter()) {
-                for (String providerType : providerTypes) {
-                    writer.write(providerType);
-                    writer.write("\n");
-                }
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate Pi schema provider service file", e);
-        }
+        PiProcessorServiceFileSupport.writeServiceFile(
+                processingEnv,
+                providerTypes,
+                "org.pickaid.piserializekit.api.schema.PiSchemaProvider",
+                "Failed to generate Pi schema provider service file"
+        );
     }
 
     private void writeLivingProviderServiceFile() {
-        if (livingProviderTypes.isEmpty()) {
-            return;
-        }
-        try {
-            FileObject file = processingEnv.getFiler().createResource(
-                    StandardLocation.CLASS_OUTPUT,
-                    "",
-                    "META-INF/services/" + LIVING_SERVICE_PROVIDER
-            );
-            try (Writer writer = file.openWriter()) {
-                for (String providerType : livingProviderTypes) {
-                    writer.write(providerType);
-                    writer.write("\n");
-                }
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to generate Pi living service provider service file", e);
-        }
+        PiProcessorServiceFileSupport.writeServiceFile(
+                processingEnv,
+                livingProviderTypes,
+                LIVING_SERVICE_PROVIDER,
+                "Failed to generate Pi living service provider service file"
+        );
     }
 
     private LivingServiceSpec livingServiceSpec(TypeElement typeElement) {
