@@ -22,6 +22,7 @@ eclipse
 run
 logs
 .worktrees
+docs/superpowers
 
 # Files from Forge MDK
 forge*changelog.txt

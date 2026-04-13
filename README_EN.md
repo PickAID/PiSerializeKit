@@ -2,57 +2,166 @@
 
 [中文版](README.MD)
 
-`PiSerializeKit` is the independent serialization foundation for the Pi stack.
+`PiSerializeKit` is the part of the Pi stack that answers one question: how is data described, encoded, decoded, upgraded, and looked up at runtime?
 
-It gives the Pi repos one shared language for value codecs, NBT codecs, and packet codecs, instead of letting every mod invent another serialization layer.
+Use it when you need any of these:
 
-It should also become the typed serialization base for `PiDataGraph` counters, reaction states, and graph node payloads.
+1. a typed state model that can be saved and synced;
+2. a packet with a stable id, version, and decode path;
+3. a reusable serializer for one Java type;
+4. runtime lookup from an authored class to its generated schema or packet binding.
 
-## Start-Stage Goals
+Most authors only touch three layers:
 
-1. provide stable serializer, type-key, and service lookup contracts;
-2. give `Pibrary`, `PiNet`, `PiKubeJSCompat`, and future engine repos one shared serialization boundary;
-3. keep the repo independent instead of folding it back into the `Pibrary` monolith;
-4. converge state schema and packet schema onto one field language.
+1. annotations such as `@PiSyncModel`, `@PiField`, and `@PiPacket`;
+2. runtime entry points such as `PiSchemas`, `PiPackets`, and `PiSerializeServices`;
+3. serializer APIs such as `PiSerializer` and `PiSerializers`.
 
-## Current Surface
+You normally do not hand-reference `_PiSchema`, `_PiPacket`, or other generated companion names.
 
-1. `PiSerializer`
-   groups value codec, NBT codec, and packet codec.
-2. `PiNbtCodec`
-   `CompoundTag` serialization contract.
-3. `PiPacketCodec`
-   `FriendlyByteBuf` serialization contract.
-4. `PiSerializerType`
-   stable serializer identity.
-5. `PiSerializeService`
-   unified registration and lookup surface.
-6. `PiSerializeServices`
-   installation and access point for the active runtime service.
-7. `@PiSyncModel` / `@PiField`
-   compile-time state bindings with projections, deltas, and schema migrations.
-8. `@PiPacket` / `@PiPacketNamespace` / `@PiPacketUpgrade`
-   compile-time packet bindings, providers, packet ids, packet versions, and packet migration chains.
-9. `PiSchemas` / `PiPackets`
-   `ServiceLoader`-backed runtime registries for schema and packet bindings, including packet-id lookup.
-10. `PiDecodeContext`
-    structured decode diagnostics with field paths, fatal flags, and migration failure reporting.
-11. `PiRuntimeLookupException` / `PiRuntimeConflictException` / `PiRuntimeBootstrapException`
-    one runtime exception surface for missing bindings, conflicting registrations, and provider bootstrap failures, with minimal machine-readable context.
+## Typical usage
 
-## Authoring Guardrails
+### 1. Define a persisted and synced state
 
-Before using `@PiSyncModel` or `@PiPacket`, the current processor contract is:
+```java
+@PiSyncModel(id = "example:mana_state", version = 1)
+public final class ManaState {
+    @PiField(id = "mana", sync = PiSyncScope.TRACKING, persist = true)
+    public int mana;
 
-1. `@PiSyncModel.version` and `@PiPacket.version` must be `>= 1`;
-2. schema ids and packet ids must stay unique within the same compilation;
-3. `@PiSyncModel`, `@PiPacket`, and `@PiLivingService` must be top-level concrete classes;
-4. `@PiSyncModel` needs an accessible no-arg constructor that does not declare checked exceptions;
-5. packet constructors used for generated decode must match declared `@PiField` order and must not declare checked exceptions;
-6. `@PiField(serializer = ...)` providers need an accessible no-arg constructor that does not declare checked exceptions;
-7. `@PiAfterDecode`, `@PiSchemaUpgrade`, and `@PiPacketUpgrade` methods must not declare checked exceptions.
+    @PiField(id = "selected_spell", sync = PiSyncScope.OWNER, persist = true)
+    public String selectedSpell = "";
+}
+```
 
-## Verification Gate
+At runtime you resolve the binding from the authored class:
+
+```java
+PiStateBinding<ManaState> binding = PiSchemas.require(ManaState.class);
+
+CompoundTag full = binding.saveFull(state);
+binding.loadFull(restored, full, PiDecodeContext.strict());
+```
+
+The same binding also gives you projections and deltas:
+
+```java
+CompoundTag clientView = binding.saveClientView(state);
+CompoundTag persisted = binding.savePersisted(state);
+CompoundTag delta = binding.writeClientDelta(state, dirtySet);
+```
+
+### 2. Define a packet
+
+You can set a namespace once per package:
+
+```java
+@PiPacketNamespace("example")
+package com.example.packet;
+```
+
+Then write the packet itself:
+
+```java
+@PiPacket
+public final class CastSkillPacket extends PiServerPacket {
+    @PiField(id = "skill", sync = PiSyncScope.OWNER, persist = false)
+    public String skill;
+
+    @PiField(id = "level", sync = PiSyncScope.OWNER, persist = false)
+    public int level;
+
+    public CastSkillPacket(String skill, int level) {
+        this.skill = skill;
+        this.level = level;
+    }
+
+    @Override
+    protected void handle(PiServerPacketContext context) {
+    }
+}
+```
+
+Again, runtime code resolves the binding from the authored class or stable id:
+
+```java
+PiPacketBinding<CastSkillPacket, ?> binding = PiPackets.require(CastSkillPacket.class);
+FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+
+binding.codec().write(buf, new CastSkillPacket("fireball", 2));
+CastSkillPacket decoded = binding.codec().read(buf);
+```
+
+### 3. Install or scope a serializer runtime
+
+If you want the built-in serializers:
+
+```java
+PiSerializeRuntime runtime = new PiSerializeRuntime();
+PiBuiltInSerializers.install(runtime);
+PiSerializeServices.install(runtime);
+```
+
+If you want a temporary override for one code path:
+
+```java
+PiSerializeServices.withScope(runtime, () -> {
+    PiSerializer<String> serializer = PiSerializeServices.requireSerializer(PiSerializers.STRING);
+});
+```
+
+That scoped override is useful for tests, isolated local overrides, and higher-level packs that need their own serializer policy.
+
+## What you should depend on
+
+These are the main stable author-facing entry points:
+
+1. `org.pickaid.piserializekit.api.schema.*`
+2. `org.pickaid.piserializekit.api.packet.*`
+3. `org.pickaid.piserializekit.api.service.*`
+4. `org.pickaid.piserializekit.api.runtime.*`
+5. `PiSchemas`
+6. `PiPackets`
+7. `PiSerializeServices`
+
+These should currently be treated as internal implementation detail:
+
+1. `processor.*`
+2. `processor.support.*`
+3. `processor.model.*`
+4. `runtime.*.support`
+5. `runtime.*.codec`
+6. generated companion class names themselves
+
+## Authoring rules
+
+Before using `@PiSyncModel` or `@PiPacket`, keep these hard rules in mind:
+
+1. `@PiSyncModel.version` and `@PiPacket.version` must be `>= 1`
+2. schema ids and packet ids must stay unique within the same compilation
+3. `@PiSyncModel`, `@PiPacket`, and `@PiLivingService` must be top-level concrete classes
+4. `@PiSyncModel` needs an accessible no-arg constructor with no checked exceptions
+5. packet constructors used for generated decode must match `@PiField` order and must not declare checked exceptions
+6. `@PiField(serializer = ...)` providers need an accessible no-arg constructor with no checked exceptions
+7. `@PiAfterDecode`, `@PiSchemaUpgrade`, and `@PiPacketUpgrade` methods must not declare checked exceptions
+
+## What this repo does not do
+
+`PiSerializeKit` does not own:
+
+1. channel installation, send targets, thread routing, or transport guards;
+2. capability or host-runtime wiring;
+3. gameplay service lifecycles;
+4. high-level UI, render, or world author magic;
+5. reflective black-box auto-read/write.
+
+In practice:
+
+1. `PiSerializeKit` owns how data is described, upgraded, diagnosed, and bound;
+2. `PiNet` owns how packets are transported, routed, and guarded;
+3. `Pibrary` and later packs own how schemas and packets enter real gameplay hosts.
+
+## Verification
 
 The minimum cold verification gate for this repo is:
 
@@ -60,32 +169,4 @@ The minimum cold verification gate for this repo is:
 bash ./gradlew clean test --no-daemon
 ```
 
-The repo also ships `.github/workflows/ci.yml` so the same `clean test` path runs in CI instead of relying only on a passing local workstation.
-
-## API Stability Boundaries
-
-The current compatibility boundary is meant to be read in three layers:
-
-1. Stable author-facing API:
-   `org.pickaid.piserializekit.api.schema`, `api.packet`, `api.service`, `api.runtime`, plus the runtime entry points `PiSchemas`, `PiPackets`, and `PiSerializeServices`.
-2. Internal implementation API:
-   `processor.*`, `processor.support.*`, `processor.model.*`, `runtime.*.support`, and `runtime.*.codec` do not currently promise downstream stability and should not be treated as public extension points.
-3. Generated naming boundary:
-   `_PiSchema`, `_PiFields`, `_PiPacket`, and `_PiPacketProvider` companions are primarily build artifacts. Downstream code should prefer `PiSchemas` / `PiPackets` or higher-level host APIs instead of hard-coding generated type names as stable handwritten contracts.
-
-## Explicitly Not Heavy Yet
-
-This repo still does not own:
-1. channel installation, send targets, thread routing, or transport guards;
-2. capability / host runtime wiring and gameplay service lifecycles;
-3. higher-level UI / render / world author magic;
-4. reflective black-box read/write generators;
-5. engine-specific heavyweight runtime packaging.
-
-## Repo Role
-
-1. this is an independent foundation repo;
-2. multiple Pi repos should be able to consume it directly;
-3. it owns how data models are described, upgraded, diagnosed, and bound;
-4. `PiNet` owns how packets are transported, routed, and guarded;
-5. `Pibrary` and later packs own how those schemas and packets enter concrete gameplay hosts.
+The repo also ships `.github/workflows/ci.yml`, which runs the same `clean test` gate on GitHub.
