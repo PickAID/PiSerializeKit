@@ -52,6 +52,27 @@
 6. `@PiField(serializer = ...)` provider 需要可访问的无参构造器，且不能声明 checked exception；
 7. `@PiAfterDecode`、`@PiSchemaUpgrade`、`@PiPacketUpgrade` 方法不能声明 checked exception。
 
+## 验证门槛
+
+当前仓库把下面这条命令视为合并前的最低冷验证门槛：
+
+```bash
+bash ./gradlew clean test --no-daemon
+```
+
+仓库同时提供 `.github/workflows/ci.yml`，把同一条 `clean test` 变成固定 CI gate，而不是只依赖本地偶尔手跑。
+
+## API 稳定边界
+
+当前建议按下面三层理解兼容边界：
+
+1. 稳定作者 API：
+   `org.pickaid.piserializekit.api.schema`、`api.packet`、`api.service`、`api.runtime`，以及运行时入口 `PiSchemas`、`PiPackets`、`PiSerializeServices`。
+2. 内部实现 API：
+   `processor.*`、`processor.support.*`、`processor.model.*`、`runtime.*.support`、`runtime.*.codec` 等包默认不承诺稳定，不建议下游直接依赖。
+3. 生成物命名边界：
+   `_PiSchema`、`_PiFields`、`_PiPacket`、`_PiPacketProvider` 这类 generated type 主要是编译产物；下游更推荐通过 `PiSchemas` / `PiPackets` 或上层 pack 暴露的 host API 间接消费，而不是把这些名字当手写稳定契约。
+
 ## 当前明确不做满
 
 本仓库当前仍然不负责：

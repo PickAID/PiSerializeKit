@@ -52,6 +52,27 @@ Before using `@PiSyncModel` or `@PiPacket`, the current processor contract is:
 6. `@PiField(serializer = ...)` providers need an accessible no-arg constructor that does not declare checked exceptions;
 7. `@PiAfterDecode`, `@PiSchemaUpgrade`, and `@PiPacketUpgrade` methods must not declare checked exceptions.
 
+## Verification Gate
+
+The minimum cold verification gate for this repo is:
+
+```bash
+bash ./gradlew clean test --no-daemon
+```
+
+The repo also ships `.github/workflows/ci.yml` so the same `clean test` path runs in CI instead of relying only on a passing local workstation.
+
+## API Stability Boundaries
+
+The current compatibility boundary is meant to be read in three layers:
+
+1. Stable author-facing API:
+   `org.pickaid.piserializekit.api.schema`, `api.packet`, `api.service`, `api.runtime`, plus the runtime entry points `PiSchemas`, `PiPackets`, and `PiSerializeServices`.
+2. Internal implementation API:
+   `processor.*`, `processor.support.*`, `processor.model.*`, `runtime.*.support`, and `runtime.*.codec` do not currently promise downstream stability and should not be treated as public extension points.
+3. Generated naming boundary:
+   `_PiSchema`, `_PiFields`, `_PiPacket`, and `_PiPacketProvider` companions are primarily build artifacts. Downstream code should prefer `PiSchemas` / `PiPackets` or higher-level host APIs instead of hard-coding generated type names as stable handwritten contracts.
+
 ## Explicitly Not Heavy Yet
 
 This repo still does not own:
