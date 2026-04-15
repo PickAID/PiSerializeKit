@@ -196,13 +196,13 @@ public final class PiProcessorPacketAuthoringSupport {
 
     private PiPacketDirectionSpec resolvePacketDirection(TypeElement typeElement) {
         if (isAssignableTo(typeElement, serverPacket)) {
-            return new PiPacketDirectionSpec("SERVERBOUND", "PiServerPacketContext");
+            return new PiPacketDirectionSpec("SERVERBOUND");
         }
         if (isAssignableTo(typeElement, clientPacket)) {
-            return new PiPacketDirectionSpec("CLIENTBOUND", "PiClientPacketContext");
+            return new PiPacketDirectionSpec("CLIENTBOUND");
         }
         if (isAssignableTo(typeElement, bidirectionalPacket)) {
-            return new PiPacketDirectionSpec("BIDIRECTIONAL", "PiPacketContext");
+            return new PiPacketDirectionSpec("BIDIRECTIONAL");
         }
         processingEnv.getMessager().printMessage(
                 Diagnostic.Kind.ERROR,

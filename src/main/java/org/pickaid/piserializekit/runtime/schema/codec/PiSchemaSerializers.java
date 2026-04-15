@@ -11,6 +11,8 @@ import net.minecraft.network.FriendlyByteBuf;
 import org.pickaid.piserializekit.api.packet.PiPacketDecodeException;
 import org.pickaid.piserializekit.api.nbt.PiNbtCodec;
 import org.pickaid.piserializekit.api.packet.PiPacketCodec;
+import org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer;
+import org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffers;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.schema.PiDecodeException;
 import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
@@ -50,12 +52,12 @@ public final class PiSchemaSerializers {
         };
         PiPacketCodec<T> packetCodec = new PiPacketCodec<>() {
             @Override
-            public void write(FriendlyByteBuf buffer, T value) {
+            public void write(PiPacketBuffer buffer, T value) {
                 buffer.writeNbt(binding(stateType).saveFull(value));
             }
 
             @Override
-            public T read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            public T read(PiPacketBuffer buffer, PiDecodeContext context) {
                 CompoundTag tag = PiPacketSupport.safeRead(context, "", buffer::readNbt, null);
                 if (tag == null) {
                     return binding(stateType).newState();
@@ -66,7 +68,7 @@ public final class PiSchemaSerializers {
             @Override
             public T read(FriendlyByteBuf buffer) {
                 PiDecodeContext context = PiDecodeContext.strict();
-                T value = read(buffer, context);
+                T value = read(PiPacketBuffers.wrap(buffer), context);
                 if (context.result().hasIssues()) {
                     throw new PiPacketDecodeException(binding(stateType).schemaId(), context.result());
                 }

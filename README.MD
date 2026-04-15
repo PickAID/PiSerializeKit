@@ -9,15 +9,21 @@
 1. 给一个状态类写持久化和同步结构；
 2. 给一个 packet 写稳定 id、版本和 decode 逻辑；
 3. 给某个类型提供统一 serializer；
-4. 在运行时按 authored class 取回对应的 schema binding 或 packet binding。
+4. 在运行时直接按类型保存、读取状态或 packet。
 
-大多数作者平时只会接触三层东西：
+平时常用的只有三层东西：
 
 1. 注解：`@PiSyncModel`、`@PiField`、`@PiPacket`
 2. 运行时入口：`PiSchemas`、`PiPackets`、`PiSerializeServices`
 3. 少量 serializer API：`PiSerializer`、`PiSerializers`
 
-你通常不需要手写或直接依赖 `_PiSchema`、`_PiPacket` 这类 generated class。
+你通常不需要手写或直接依赖 `_PiSchema`、`_PiPacket` 这类 generated class，也不该把 `binding.codec()` 当作第一层日常用法。
+
+常见分层可以这样理解：
+
+1. `api.*` 下面是你平时直接写代码会碰到的注解和契约
+2. `PiSchemas`、`PiPackets` 是 runtime lookup 入口
+3. `PiNet` 会直接消费这里生成出来的 packet id、version 和 codec
 
 ## 典型用法
 
@@ -34,18 +40,18 @@ public final class ManaState {
 }
 ```
 
-运行时你拿到的是 binding，而不是自己去找 generated class：
+最直接的用法是按类型直接保存和读取：
+
+```java
+CompoundTag full = PiSchemas.saveFull(state);
+ManaState restored = PiSchemas.loadFull(ManaState.class, full);
+```
+
+如果你需要 client view、persisted view、delta 这种更细的控制，再下到 binding：
 
 ```java
 PiStateBinding<ManaState> binding = PiSchemas.require(ManaState.class);
 
-CompoundTag full = binding.saveFull(state);
-binding.loadFull(restored, full, PiDecodeContext.strict());
-```
-
-如果你只想写默认 client view、persisted view 或 delta，也都走 binding：
-
-```java
 CompoundTag clientView = binding.saveClientView(state);
 CompoundTag persisted = binding.savePersisted(state);
 CompoundTag delta = binding.writeClientDelta(state, dirtySet);
@@ -75,22 +81,29 @@ public final class CastSkillPacket extends PiServerPacket {
         this.skill = skill;
         this.level = level;
     }
-
-    @Override
-    protected void handle(PiServerPacketContext context) {
-    }
 }
 ```
 
-运行时同样按 authored class 或稳定 id 取 binding：
+大多数时候，写完这个类就够了。`PiSerializeKit` 这边主要负责让这个 packet 有稳定 id、版本和 decode 逻辑，`PiNet` 会直接接住这层结果去做注册和收发。
+
+这里的 `@PiField(sync = ...)` 只是为了让 packet 字段和 schema 字段复用同一套字段描述；route、tracking、broadcast 这些发送语义还是由上层网络层决定。
+
+如果你在做调试、桥接或底层 transport 接线，也可以直接按类型编解码：
 
 ```java
-PiPacketBinding<CastSkillPacket, ?> binding = PiPackets.require(CastSkillPacket.class);
-FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+CastSkillPacket packet = new CastSkillPacket("fireball", 2);
+FriendlyByteBuf raw = new FriendlyByteBuf(Unpooled.buffer());
+PiPacketBuffer buffer = PiPacketBuffers.wrap(raw);
 
-binding.codec().write(buf, new CastSkillPacket("fireball", 2));
-CastSkillPacket decoded = binding.codec().read(buf);
+PiPackets.write(buffer, packet);
+raw.readerIndex(0);
+
+ResourceLocation id = packet.packetId();
+int version = packet.version();
+CastSkillPacket decoded = PiPackets.read(CastSkillPacket.class, buffer);
 ```
+
+只有在你需要查 binding、字段列表、版本或 migration 信息时，才需要再下到 `PiPackets.require(...)`。
 
 ### 3. 安装或临时覆盖 serializer runtime
 
@@ -102,6 +115,12 @@ PiBuiltInSerializers.install(runtime);
 PiSerializeServices.install(runtime);
 ```
 
+这几个类的实际位置是：
+
+1. `org.pickaid.piserializekit.runtime.service.PiSerializeRuntime`
+2. `org.pickaid.piserializekit.runtime.service.PiBuiltInSerializers`
+3. `org.pickaid.piserializekit.api.service.PiSerializeServices`
+
 如果你只是想在某个局部逻辑里临时切换 runtime：
 
 ```java
@@ -112,9 +131,9 @@ PiSerializeServices.withScope(runtime, () -> {
 
 这个 scoped override 很适合测试、局部覆盖或上层 pack 做隔离策略。
 
-## 你实际会依赖哪些 API
+## 更底层时再用这些 API
 
-稳定的作者侧入口主要是这些：
+平时常用入口主要是这些：
 
 1. `org.pickaid.piserializekit.api.schema.*`
 2. `org.pickaid.piserializekit.api.packet.*`
@@ -124,49 +143,23 @@ PiSerializeServices.withScope(runtime, () -> {
 6. `PiPackets`
 7. `PiSerializeServices`
 
-下面这些默认按内部实现处理，不建议下游直接写死依赖：
+如果你需要更多控制，再下到：
 
-1. `processor.*`
-2. `processor.support.*`
-3. `processor.model.*`
-4. `runtime.*.support`
-5. `runtime.*.codec`
-6. generated class 名字本身
+1. `PiStateBinding`
+2. `PiPacketBinding`
+3. `PiDecodeContext`
+4. `PiSerializer`
 
-## 作者侧规则
+这些更多是高级入口，不应该成为最先展示的日常写法。
+
+## 使用规则
 
 第一次写 `@PiSyncModel` / `@PiPacket` 前，先记住这些硬规则：
 
 1. `@PiSyncModel.version` 和 `@PiPacket.version` 必须 `>= 1`
 2. schema id 和 packet id 在同一轮编译里必须唯一
-3. `@PiSyncModel`、`@PiPacket`、`@PiLivingService` 必须是 top-level concrete class
+3. `@PiSyncModel`、`@PiPacket` 必须是 top-level concrete class
 4. `@PiSyncModel` 需要可访问的无参构造器，而且不能声明 checked exception
 5. `@PiPacket` 的 decode 构造器必须和 `@PiField` 顺序一致，而且不能声明 checked exception
 6. `@PiField(serializer = ...)` provider 需要可访问的无参构造器，而且不能声明 checked exception
 7. `@PiAfterDecode`、`@PiSchemaUpgrade`、`@PiPacketUpgrade` 方法不能声明 checked exception
-
-## 这个库不负责什么
-
-这些事不属于 `PiSerializeKit`：
-
-1. channel 安装、发送目标、线程切换、transport guard
-2. capability / host runtime 绑定
-3. gameplay service 生命周期
-4. UI、render、world 的高层 author magic
-5. 黑盒反射式自动读写
-
-换句话说：
-
-1. `PiSerializeKit` 负责数据如何描述、升级、诊断、绑定
-2. `PiNet` 负责 packet 如何发送、路由、守卫
-3. `Pibrary` 和后续 packs 负责这些 schema / packet 如何进入实际 gameplay host
-
-## 验证
-
-这个仓库当前把下面这条命令当作最低冷验证门槛：
-
-```bash
-bash ./gradlew clean test --no-daemon
-```
-
-仓库里也有 `.github/workflows/ci.yml`，会在 GitHub 上跑同一条 `clean test`。

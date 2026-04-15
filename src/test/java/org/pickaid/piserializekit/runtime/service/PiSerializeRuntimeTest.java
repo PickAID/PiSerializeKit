@@ -621,12 +621,12 @@ class PiSerializeRuntimeTest {
     private static PiSerializer<String> throwingPacketStringSerializer(String message) {
         return PiSerializers.of(Codec.STRING, new PiPacketCodec<>() {
             @Override
-            public void write(FriendlyByteBuf buffer, String value) {
+            public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, String value) {
                 buffer.writeUtf(value);
             }
 
             @Override
-            public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            public String read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                 throw new IllegalStateException(message);
             }
         });
@@ -635,12 +635,12 @@ class PiSerializeRuntimeTest {
     private static PiSerializer<String> constantStringSerializer(String fallback) {
         return PiSerializers.of(Codec.STRING, new PiPacketCodec<>() {
             @Override
-            public void write(FriendlyByteBuf buffer, String value) {
+            public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, String value) {
                 buffer.writeUtf(value);
             }
 
             @Override
-            public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            public String read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                 return fallback;
             }
         });
@@ -649,12 +649,12 @@ class PiSerializeRuntimeTest {
     private static PiSerializer<Integer> constantIntSerializer(int fallback) {
         return PiSerializers.of(Codec.INT, new PiPacketCodec<>() {
             @Override
-            public void write(FriendlyByteBuf buffer, Integer value) {
+            public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, Integer value) {
                 buffer.writeVarInt(value);
             }
 
             @Override
-            public Integer read(FriendlyByteBuf buffer, PiDecodeContext context) {
+            public Integer read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                 return fallback;
             }
         });

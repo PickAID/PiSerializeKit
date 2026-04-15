@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.List;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.FriendlyByteBuf;
+import org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;
 import org.pickaid.piserializekit.api.schema.PiSchemaMigration;
@@ -37,7 +37,7 @@ public final class PiPacketSupport {
     }
 
     public static <T> T readIncomingField(
-            FriendlyByteBuf buffer,
+            PiPacketBuffer buffer,
             String path,
             PiSerializer<T> serializer,
             PiDecodeContext context,
@@ -49,10 +49,8 @@ public final class PiPacketSupport {
         Objects.requireNonNull(serializer, "serializer");
         Objects.requireNonNull(context, "context");
         PiDecodeContext fieldContext = context.child(path);
-        if (legacy) {
-            if (!buffer.isReadable()) {
-                return null;
-            }
+        if (legacy && !buffer.isReadable()) {
+            return null;
         }
         return readNestedValue(buffer, serializer, fieldContext, legacy ? null : fallback);
     }
@@ -64,7 +62,7 @@ public final class PiPacketSupport {
      * the same diagnostics model as generated packet bindings.</p>
      */
     public static <T> T readNestedValue(
-            FriendlyByteBuf buffer,
+            PiPacketBuffer buffer,
             PiSerializer<T> serializer,
             PiDecodeContext context,
             T fallback

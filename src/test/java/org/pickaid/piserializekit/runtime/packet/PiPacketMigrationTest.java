@@ -25,7 +25,7 @@ import org.pickaid.piserializekit.runtime.packet.fixture.LegacySkillPacket;
 class PiPacketMigrationTest {
     @Test
     void olderPacketVersionUpgradesBeforeConstruction() {
-        PiPacketBinding<LegacySkillPacket, ?> binding = PiPackets.require(LegacySkillPacket.class);
+        PiPacketBinding<LegacySkillPacket> binding = PiPackets.require(LegacySkillPacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
         PiSerializeServices.require().lookup(PiSerializers.RESOURCE_LOCATION).orElseThrow().packetCodec().write(
@@ -73,7 +73,7 @@ class PiPacketMigrationTest {
 
     @Test
     void legacyPacketDecodeRetainsOriginalFieldFailure() {
-        PiPacketBinding<LegacySkillPacket, ?> binding = PiPackets.require(LegacySkillPacket.class);
+        PiPacketBinding<LegacySkillPacket> binding = PiPackets.require(LegacySkillPacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
         buffer.writeUtf("Bad Value");

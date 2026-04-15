@@ -1,12 +1,14 @@
 package org.pickaid.piserializekit.runtime.packet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.Codec;
 import io.netty.buffer.Unpooled;
+import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
 import java.util.List;
 import net.minecraft.nbt.CompoundTag;
@@ -17,7 +19,6 @@ import org.pickaid.piserializekit.api.packet.PiPacketBinding;
 import org.pickaid.piserializekit.api.packet.PiPacketCodec;
 import org.pickaid.piserializekit.api.packet.PiPacketDirection;
 import org.pickaid.piserializekit.api.packet.PiPacketRegistry;
-import org.pickaid.piserializekit.api.packet.PiServerPacketContext;
 import org.pickaid.piserializekit.api.packet.PiPacketDecodeException;
 import org.pickaid.piserializekit.api.nbt.PiNbtCodec;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeBindingValidationException;
@@ -34,8 +35,41 @@ import org.pickaid.piserializekit.runtime.packet.fixture.ThrowingNoticePacket;
 
 class PiPacketsTest {
     @Test
+    void convenienceWriteAndReadUsePacketTypeBinding() throws Exception {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        TestNoticePacket source = new TestNoticePacket("alert", List.of("alpha", "beta"));
+        Method write = PiPackets.class.getMethod("write", FriendlyByteBuf.class, Object.class);
+        Method read = PiPackets.class.getMethod("read", Class.class, FriendlyByteBuf.class);
+
+        write.invoke(null, buffer, source);
+        Object decoded = read.invoke(null, TestNoticePacket.class, buffer);
+
+        assertNotNull(decoded);
+        assertTrue(decoded instanceof TestNoticePacket);
+        assertEquals("alert", ((TestNoticePacket) decoded).title);
+        assertEquals(List.of("alpha", "beta"), ((TestNoticePacket) decoded).lines);
+    }
+
+    @Test
+    void packetBaseExposesPacketMetadataAndSelfWrite() {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        TestNoticePacket source = new TestNoticePacket("alert", List.of("alpha", "beta"));
+
+        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), source.packetId());
+        assertEquals(1, source.version());
+        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), PiPackets.packetId(TestNoticePacket.class));
+        assertEquals(1, PiPackets.version(TestNoticePacket.class));
+
+        source.write(buffer);
+        TestNoticePacket decoded = PiPackets.read(TestNoticePacket.class, buffer);
+
+        assertEquals("alert", decoded.title);
+        assertEquals(List.of("alpha", "beta"), decoded.lines);
+    }
+
+    @Test
     void packetBindingsLoadByTypeAndPacketId() {
-        PiPacketBinding<TestNoticePacket, ?> binding = PiPackets.require(TestNoticePacket.class);
+        PiPacketBinding<TestNoticePacket> binding = PiPackets.require(TestNoticePacket.class);
 
         assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), binding.packetId());
         assertSame(binding, PiPackets.require(ResourceLocation.fromNamespaceAndPath("test", "test_notice")));
@@ -55,7 +89,7 @@ class PiPacketsTest {
     @Test
     void rejectsDuplicateBindingsForSamePacketTypeWithConflictDetails() throws Exception {
         PiPacketRegistry registry = newRegistry();
-        PiPacketBinding<TestNoticePacket, ?> binding = PiPackets.require(TestNoticePacket.class);
+        PiPacketBinding<TestNoticePacket> binding = PiPackets.require(TestNoticePacket.class);
         registry.register(TestNoticePacket.class, binding);
 
         PiRuntimeConflictException exception = assertThrows(
@@ -73,7 +107,7 @@ class PiPacketsTest {
     @Test
     void rejectsDuplicateBindingsForSamePacketIdWithConflictDetails() throws Exception {
         PiPacketRegistry registry = newRegistry();
-        PiPacketBinding<TestNoticePacket, ?> binding = PiPackets.require(TestNoticePacket.class);
+        PiPacketBinding<TestNoticePacket> binding = PiPackets.require(TestNoticePacket.class);
         registry.register(TestNoticePacket.class, binding);
 
         PiRuntimeConflictException exception = assertThrows(
@@ -161,7 +195,7 @@ class PiPacketsTest {
 
     @Test
     void packetCodecReportsNestedDecodePathThroughContext() {
-        PiPacketBinding<TestNoticePacket, ?> binding = PiPackets.require(TestNoticePacket.class);
+        PiPacketBinding<TestNoticePacket> binding = PiPackets.require(TestNoticePacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
         buffer.writeUtf("alert");
@@ -179,7 +213,7 @@ class PiPacketsTest {
 
     @Test
     void strictPacketReadThrowsStructuredDecodeException() {
-        PiPacketBinding<TestNoticePacket, ?> binding = PiPackets.require(TestNoticePacket.class);
+        PiPacketBinding<TestNoticePacket> binding = PiPackets.require(TestNoticePacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
         buffer.writeUtf("alert");
@@ -193,7 +227,7 @@ class PiPacketsTest {
 
     @Test
     void generatedPacketCurrentVersionDecodeCollectsThrownFieldCodecFailure() {
-        PiPacketBinding<ThrowingNoticePacket, ?> binding = PiPackets.require(ThrowingNoticePacket.class);
+        PiPacketBinding<ThrowingNoticePacket> binding = PiPackets.require(ThrowingNoticePacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
 
@@ -209,7 +243,7 @@ class PiPacketsTest {
 
     @Test
     void generatedPacketStrictReadWrapsThrownFieldCodecFailureIntoStructuredPacketException() {
-        PiPacketBinding<ThrowingNoticePacket, ?> binding = PiPackets.require(ThrowingNoticePacket.class);
+        PiPacketBinding<ThrowingNoticePacket> binding = PiPackets.require(ThrowingNoticePacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
 
@@ -224,7 +258,7 @@ class PiPacketsTest {
 
     @Test
     void generatedPacketStrictReadWrapsThrownConstructorFailureIntoStructuredPacketException() {
-        PiPacketBinding<ThrowingCtorPacket, ?> binding = PiPackets.require(ThrowingCtorPacket.class);
+        PiPacketBinding<ThrowingCtorPacket> binding = PiPackets.require(ThrowingCtorPacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
         buffer.writeUtf("alert");
@@ -240,7 +274,7 @@ class PiPacketsTest {
 
     @Test
     void generatedPacketContextReadCollectsThrownConstructorFailureWithoutLeakingRuntimeException() {
-        PiPacketBinding<ThrowingCtorPacket, ?> binding = PiPackets.require(ThrowingCtorPacket.class);
+        PiPacketBinding<ThrowingCtorPacket> binding = PiPackets.require(ThrowingCtorPacket.class);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         buffer.writeVarInt(1);
         buffer.writeUtf("alert");
@@ -541,35 +575,35 @@ class PiPacketsTest {
 
     private static PiSerializer<String> blankEncodeMessageSerializer() {
         return new PiSerializer<>() {
-            @Override
+        @Override
             public Codec<String> valueCodec() {
                 return Codec.STRING;
             }
 
-            @Override
+        @Override
             public PiNbtCodec<String> nbtCodec() {
                 return new PiNbtCodec<>() {
-                    @Override
+        @Override
                     public CompoundTag encode(String value) {
                         throw new IllegalStateException("   ");
                     }
 
-                    @Override
+        @Override
                     public String decode(CompoundTag tag) {
                         return "";
                     }
                 };
             }
 
-            @Override
+        @Override
             public PiPacketCodec<String> packetCodec() {
                 return new PiPacketCodec<>() {
-                    @Override
-                    public void write(FriendlyByteBuf buffer, String value) {
+        @Override
+                    public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, String value) {
                     }
 
-                    @Override
-                    public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        @Override
+                    public String read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                         return "";
                     }
                 };
@@ -581,12 +615,9 @@ class PiPacketsTest {
     }
 
     private static final class OtherPacket extends org.pickaid.piserializekit.api.packet.PiServerPacket {
-        @Override
-        protected void handle(PiServerPacketContext context) {
-        }
     }
 
-    private static final class DuplicatePacketTypeBinding implements PiPacketBinding<TestNoticePacket, PiServerPacketContext> {
+    private static final class DuplicatePacketTypeBinding implements PiPacketBinding<TestNoticePacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "duplicate_packet_type");
@@ -617,12 +648,9 @@ class PiPacketsTest {
             return noopCodec(new TestNoticePacket("", List.of()));
         }
 
-        @Override
-        public void dispatch(TestNoticePacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class DuplicatePacketIdBinding implements PiPacketBinding<OtherPacket, PiServerPacketContext> {
+    private static final class DuplicatePacketIdBinding implements PiPacketBinding<OtherPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "test_notice");
@@ -653,19 +681,16 @@ class PiPacketsTest {
             return noopCodec(new OtherPacket());
         }
 
-        @Override
-        public void dispatch(OtherPacket packet, PiServerPacketContext context) {
-        }
     }
 
     private static <T> PiPacketCodec<T> noopCodec(T fallback) {
         return new PiPacketCodec<>() {
-            @Override
-            public void write(FriendlyByteBuf buffer, T value) {
+        @Override
+            public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, T value) {
             }
 
-            @Override
-            public T read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        @Override
+            public T read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                 return fallback;
             }
         };
@@ -675,24 +700,15 @@ class PiPacketsTest {
     }
 
     private static final class DirectionMismatchServerPacket extends org.pickaid.piserializekit.api.packet.PiServerPacket {
-        @Override
-        protected void handle(PiServerPacketContext context) {
-        }
     }
 
     private static final class DirectionMismatchClientPacket extends org.pickaid.piserializekit.api.packet.PiClientPacket {
-        @Override
-        protected void handle(org.pickaid.piserializekit.api.packet.PiClientPacketContext context) {
-        }
     }
 
     private static final class DirectionMismatchBidirectionalPacket extends org.pickaid.piserializekit.api.packet.PiBidirectionalPacket {
-        @Override
-        protected void handle(org.pickaid.piserializekit.api.packet.PiPacketContext context) {
-        }
     }
 
-    private static final class InvalidPacketVersionBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class InvalidPacketVersionBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "invalid_packet_version");
@@ -723,12 +739,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class WrongDirectionServerPacketBinding implements PiPacketBinding<DirectionMismatchServerPacket, PiServerPacketContext> {
+    private static final class WrongDirectionServerPacketBinding implements PiPacketBinding<DirectionMismatchServerPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "wrong_direction_server_packet");
@@ -759,12 +772,9 @@ class PiPacketsTest {
             return new DirectionMismatchServerPacketCodec();
         }
 
-        @Override
-        public void dispatch(DirectionMismatchServerPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class WrongDirectionClientPacketBinding implements PiPacketBinding<DirectionMismatchClientPacket, org.pickaid.piserializekit.api.packet.PiClientPacketContext> {
+    private static final class WrongDirectionClientPacketBinding implements PiPacketBinding<DirectionMismatchClientPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "wrong_direction_client_packet");
@@ -795,12 +805,9 @@ class PiPacketsTest {
             return new DirectionMismatchClientPacketCodec();
         }
 
-        @Override
-        public void dispatch(DirectionMismatchClientPacket packet, org.pickaid.piserializekit.api.packet.PiClientPacketContext context) {
-        }
     }
 
-    private static final class WrongDirectionBidirectionalPacketBinding implements PiPacketBinding<DirectionMismatchBidirectionalPacket, org.pickaid.piserializekit.api.packet.PiPacketContext> {
+    private static final class WrongDirectionBidirectionalPacketBinding implements PiPacketBinding<DirectionMismatchBidirectionalPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "wrong_direction_bidirectional_packet");
@@ -831,12 +838,9 @@ class PiPacketsTest {
             return new DirectionMismatchBidirectionalPacketCodec();
         }
 
-        @Override
-        public void dispatch(DirectionMismatchBidirectionalPacket packet, org.pickaid.piserializekit.api.packet.PiPacketContext context) {
-        }
     }
 
-    private static final class InvalidPacketFieldsBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class InvalidPacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "invalid_packet_fields");
@@ -867,12 +871,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class InvalidPacketMigrationsBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class InvalidPacketMigrationsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "invalid_packet_migrations");
@@ -911,12 +912,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class ReservedPacketFieldsBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class ReservedPacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "reserved_packet_fields");
@@ -947,12 +945,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class SparsePacketFieldsBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class SparsePacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "sparse_packet_fields");
@@ -983,12 +978,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketTypeBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketTypeBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "null_packet_type");
@@ -1019,12 +1011,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketIdBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketIdBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return null;
@@ -1055,12 +1044,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketDirectionBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketDirectionBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "null_packet_direction");
@@ -1091,12 +1077,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketCodecBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketCodecBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "null_packet_codec");
@@ -1127,12 +1110,9 @@ class PiPacketsTest {
             return null;
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketFieldsBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "null_packet_fields");
@@ -1163,12 +1143,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketMigrationsBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketMigrationsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "null_packet_migrations");
@@ -1204,12 +1181,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketFieldEntryBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketFieldEntryBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "null_packet_field_entry");
@@ -1240,12 +1214,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class NullPacketMigrationEntryBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class NullPacketMigrationEntryBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "null_packet_migration_entry");
@@ -1281,12 +1252,9 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class AbstractPacketBinding implements PiPacketBinding<AbstractPacket, PiServerPacketContext> {
+    private static final class AbstractPacketBinding implements PiPacketBinding<AbstractPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "abstract_packet_binding");
@@ -1315,23 +1283,20 @@ class PiPacketsTest {
         @Override
         public PiPacketCodec<AbstractPacket> codec() {
             return new PiPacketCodec<>() {
-                @Override
-                public void write(FriendlyByteBuf buffer, AbstractPacket value) {
+        @Override
+                public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, AbstractPacket value) {
                 }
 
-                @Override
-                public AbstractPacket read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        @Override
+                public AbstractPacket read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                     return null;
                 }
             };
         }
 
-        @Override
-        public void dispatch(AbstractPacket packet, PiServerPacketContext context) {
-        }
     }
 
-    private static final class IncompletePacketMigrationsBinding implements PiPacketBinding<InvalidPacket, PiServerPacketContext> {
+    private static final class IncompletePacketMigrationsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
             return ResourceLocation.fromNamespaceAndPath("test", "incomplete_packet_migrations");
@@ -1370,51 +1335,48 @@ class PiPacketsTest {
             return new NoOpPacketCodec();
         }
 
-        @Override
-        public void dispatch(InvalidPacket packet, PiServerPacketContext context) {
-        }
     }
 
     private static final class NoOpPacketCodec implements PiPacketCodec<InvalidPacket> {
         @Override
-        public void write(FriendlyByteBuf buffer, InvalidPacket value) {
+        public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, InvalidPacket value) {
         }
 
         @Override
-        public InvalidPacket read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public InvalidPacket read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
             return new InvalidPacket();
         }
     }
 
     private static final class DirectionMismatchServerPacketCodec implements PiPacketCodec<DirectionMismatchServerPacket> {
         @Override
-        public void write(FriendlyByteBuf buffer, DirectionMismatchServerPacket packet) {
+        public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, DirectionMismatchServerPacket packet) {
         }
 
         @Override
-        public DirectionMismatchServerPacket read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public DirectionMismatchServerPacket read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
             return new DirectionMismatchServerPacket();
         }
     }
 
     private static final class DirectionMismatchClientPacketCodec implements PiPacketCodec<DirectionMismatchClientPacket> {
         @Override
-        public void write(FriendlyByteBuf buffer, DirectionMismatchClientPacket packet) {
+        public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, DirectionMismatchClientPacket packet) {
         }
 
         @Override
-        public DirectionMismatchClientPacket read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public DirectionMismatchClientPacket read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
             return new DirectionMismatchClientPacket();
         }
     }
 
     private static final class DirectionMismatchBidirectionalPacketCodec implements PiPacketCodec<DirectionMismatchBidirectionalPacket> {
         @Override
-        public void write(FriendlyByteBuf buffer, DirectionMismatchBidirectionalPacket packet) {
+        public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, DirectionMismatchBidirectionalPacket packet) {
         }
 
         @Override
-        public DirectionMismatchBidirectionalPacket read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public DirectionMismatchBidirectionalPacket read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
             return new DirectionMismatchBidirectionalPacket();
         }
     }

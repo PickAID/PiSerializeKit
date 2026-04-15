@@ -3,7 +3,6 @@ package org.pickaid.piserializekit.runtime.packet.fixture;
 import java.util.List;
 import org.pickaid.piserializekit.api.packet.PiPacket;
 import org.pickaid.piserializekit.api.packet.PiServerPacket;
-import org.pickaid.piserializekit.api.packet.PiServerPacketContext;
 import org.pickaid.piserializekit.api.schema.PiField;
 import org.pickaid.piserializekit.api.schema.PiSyncScope;
 
@@ -18,9 +17,5 @@ public final class TestNoticePacket extends PiServerPacket {
     public TestNoticePacket(String title, List<String> lines) {
         this.title = title;
         this.lines = lines;
-    }
-
-    @Override
-    protected void handle(PiServerPacketContext context) {
     }
 }

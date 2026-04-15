@@ -6,7 +6,6 @@ import net.minecraft.resources.ResourceLocation;
 import org.pickaid.piserializekit.api.packet.PiPacket;
 import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;
 import org.pickaid.piserializekit.api.packet.PiServerPacket;
-import org.pickaid.piserializekit.api.packet.PiServerPacketContext;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.schema.PiField;
 import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;
@@ -36,9 +35,5 @@ public final class LegacySkillPacket extends PiServerPacket {
         );
         payload.putInt(PiSchemaSupport.SCHEMA_VERSION_KEY, 2);
         return payload;
-    }
-
-    @Override
-    protected void handle(PiServerPacketContext context) {
     }
 }

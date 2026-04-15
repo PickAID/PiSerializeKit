@@ -31,7 +31,7 @@ class PiConsumerIntegrationTest {
     @Test
     void consumerResolvesGeneratedBindingsByAuthoredTypeAndStableId() {
         PiStateBinding<GeneratedComplexState> schemaBinding = PiSchemas.require(GeneratedComplexState.class);
-        PiPacketBinding<TestNoticePacket, ?> packetBinding = PiPackets.require(TestNoticePacket.class);
+        PiPacketBinding<TestNoticePacket> packetBinding = PiPackets.require(TestNoticePacket.class);
 
         assertSame(schemaBinding, PiSchemas.require(GENERATED_COMPLEX_STATE_ID));
         assertSame(packetBinding, PiPackets.require(TEST_NOTICE_PACKET_ID));
@@ -66,7 +66,7 @@ class PiConsumerIntegrationTest {
             assertEquals("boss", restoredState.label);
             assertTrue(stateContext.result().issues().isEmpty());
 
-            PiPacketBinding<TestNoticePacket, ?> packetBinding = PiPackets.require(TestNoticePacket.class);
+            PiPacketBinding<TestNoticePacket> packetBinding = PiPackets.require(TestNoticePacket.class);
             TestNoticePacket sourcePacket = new TestNoticePacket("alert", List.of("alpha", "beta"));
             FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
 

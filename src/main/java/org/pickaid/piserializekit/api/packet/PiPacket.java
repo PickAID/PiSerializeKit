@@ -12,7 +12,7 @@ import java.lang.annotation.Target;
  * {@link PiPacketNamespace}, the path may be inferred from the class name, and
  * the version defaults to {@code 1}. Annotated packet types must also stay
  * top-level classes because generated companions are emitted as package-level
- * types beside the authored host. Constructors used by generated decode must
+ * types beside the declared host. Constructors used by generated decode must
  * stay accessible and must not throw checked exceptions because generated
  * bindings instantiate packets directly.</p>
  */

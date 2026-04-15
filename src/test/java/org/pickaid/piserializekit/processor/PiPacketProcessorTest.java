@@ -12,6 +12,51 @@ import org.junit.jupiter.api.Test;
 
 class PiPacketProcessorTest {
     @Test
+    void packetGenerationDoesNotRequireHandleMethodOrGenerateDispatchMethod() throws Exception {
+        JavaFileObject packageInfo = JavaFileObjects.forSourceLines(
+                "example.package-info",
+                "@PiPacketNamespace(\"example\")",
+                "package example;",
+                "import org.pickaid.piserializekit.api.packet.PiPacketNamespace;"
+        );
+        JavaFileObject source = JavaFileObjects.forSourceLines(
+                "example.CastSkillRequest",
+                "package example;",
+                "import net.minecraft.core.BlockPos;",
+                "import net.minecraft.resources.ResourceLocation;",
+                "import org.pickaid.piserializekit.api.packet.PiPacket;",
+                "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
+                "import org.pickaid.piserializekit.api.schema.PiField;",
+                "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
+                "@PiPacket",
+                "public final class CastSkillRequest extends PiServerPacket {",
+                "  @PiField(id = \"skill_id\", sync = PiSyncScope.OWNER, persist = false) public ResourceLocation skillId;",
+                "  @PiField(id = \"target\", sync = PiSyncScope.OWNER, persist = false) public BlockPos target;",
+                "  public CastSkillRequest(ResourceLocation skillId, BlockPos target) {",
+                "    this.skillId = skillId;",
+                "    this.target = target;",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(packageInfo, source);
+
+        assertThat(compilation).succeeded();
+        assertGeneratedContains(
+                compilation,
+                "example.CastSkillRequest_PiPacket",
+                "public static final PiPacketBinding<CastSkillRequest> BINDING = new PiPacketBinding<>() {"
+        );
+        assertGeneratedDoesNotContain(
+                compilation,
+                "example.CastSkillRequest_PiPacket",
+                "dispatch("
+        );
+    }
+
+    @Test
     void generatesPacketBindingWithPackageNamespaceAndInferredPathAndConstructorDispatch() throws Exception {
         JavaFileObject packageInfo = JavaFileObjects.forSourceLines(
                 "example.package-info",
@@ -26,7 +71,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
                 "@PiPacket",
@@ -37,7 +81,6 @@ class PiPacketProcessorTest {
                 "    this.skillId = skillId;",
                 "    this.target = target;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -52,7 +95,7 @@ class PiPacketProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.CastSkillRequest_PiPacket",
-                "public static final PiPacketBinding<CastSkillRequest, PiServerPacketContext> BINDING = new PiPacketBinding<>() {"
+                "public static final PiPacketBinding<CastSkillRequest> BINDING = new PiPacketBinding<>() {"
         );
         assertGeneratedContains(
                 compilation,
@@ -126,11 +169,6 @@ class PiPacketProcessorTest {
         );
         assertGeneratedContains(
                 compilation,
-                "example.CastSkillRequest_PiPacket",
-                "packet.handle(context);"
-        );
-        assertGeneratedContains(
-                compilation,
                 "example.CastSkillRequest_PiPacketProvider",
                 "registry.register(CastSkillRequest.class, CastSkillRequest_PiPacket.BINDING);"
         );
@@ -153,13 +191,11 @@ class PiPacketProcessorTest {
                 "example.ShowToastToClientPacket",
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiClientPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiClientPacketContext;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "@PiPacket",
                 "public final class ShowToastToClientPacket extends PiClientPacket {",
                 "  public ShowToastToClientPacket() {",
                 "  }",
-                "  @Override protected void handle(PiClientPacketContext context) { }",
                 "}"
         );
 
@@ -188,12 +224,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket",
                 "public final class CastSkillToServerPayload extends PiServerPacket {",
                 "  public CastSkillToServerPayload() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -216,7 +250,6 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiClientPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiClientPacketContext;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
@@ -226,7 +259,6 @@ class PiPacketProcessorTest {
                 "  public OpenMenuToClient(ResourceLocation menuId) {",
                 "    this.menuId = menuId;",
                 "  }",
-                "  @Override protected void handle(PiClientPacketContext context) { }",
                 "}"
         );
 
@@ -256,7 +288,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:cast_skill\")",
                 "public final class CastSkillRequest extends PiServerPacket {",
@@ -268,7 +299,6 @@ class PiPacketProcessorTest {
                 "    this.target = target;",
                 "    this.shiftDown = shiftDown;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -312,13 +342,11 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "public final class OuterPackets {",
                 "  @PiPacket",
                 "  public static final class CastSkillRequest extends PiServerPacket {",
                 "    public CastSkillRequest() {",
                 "    }",
-                "    @Override protected void handle(PiServerPacketContext context) { }",
                 "  }",
                 "}"
         );
@@ -340,12 +368,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket",
                 "public final class MissingNamespacePacket extends PiServerPacket {",
                 "  public MissingNamespacePacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -366,12 +392,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(id = \"example:invalid_version\", version = 0)",
                 "public final class InvalidVersionPacket extends PiServerPacket {",
                 "  public InvalidVersionPacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -390,12 +414,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(id = \"\")",
                 "public final class BlankIdPacket extends PiServerPacket {",
                 "  public BlankIdPacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -414,12 +436,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(namespace = \"\", path = \"show_toast\")",
                 "public final class BlankNamespacePacket extends PiServerPacket {",
                 "  public BlankNamespacePacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -438,12 +458,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(namespace = \"Example Mod\", path = \"show_toast\")",
                 "public final class InvalidNamespacePacket extends PiServerPacket {",
                 "  public InvalidNamespacePacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -464,12 +482,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(namespace = \"example\", path = \"\")",
                 "public final class BlankPathPacket extends PiServerPacket {",
                 "  public BlankPathPacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -488,12 +504,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(namespace = \"example\", path = \"Show Toast\")",
                 "public final class InvalidPathPacket extends PiServerPacket {",
                 "  public InvalidPathPacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -520,12 +534,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket",
                 "public final class InvalidPackageNamespacePacket extends PiServerPacket {",
                 "  public InvalidPackageNamespacePacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -546,12 +558,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(id = \"example:abstract_notice\")",
                 "public abstract class AbstractNoticePacket extends PiServerPacket {",
                 "  public AbstractNoticePacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -569,13 +579,11 @@ class PiPacketProcessorTest {
                 "example.OpenMenuToClient",
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiClientPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiClientPacketContext;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "@PiPacket(id = \"demo:open_menu\")",
                 "public final class OpenMenuToClient extends PiClientPacket {",
                 "  public OpenMenuToClient() {",
                 "  }",
-                "  @Override protected void handle(PiClientPacketContext context) { }",
                 "}"
         );
         JavaFileObject second = JavaFileObjects.forSourceLines(
@@ -583,12 +591,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(id = \"demo:open_menu\")",
                 "public final class OpenMenuToServer extends PiServerPacket {",
                 "  public OpenMenuToServer() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -607,12 +613,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket(id = \"demo:open_menu\", namespace = \"example\")",
                 "public final class InvalidPacketIdentityPacket extends PiServerPacket {",
                 "  public InvalidPacketIdentityPacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -639,12 +643,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket",
                 "public final class OpenMenuRequest extends PiServerPacket {",
                 "  public OpenMenuRequest() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
         JavaFileObject second = JavaFileObjects.forSourceLines(
@@ -652,12 +654,10 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "@PiPacket",
                 "public final class OpenMenuPacket extends PiServerPacket {",
                 "  public OpenMenuPacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -675,7 +675,6 @@ class PiPacketProcessorTest {
                 "example.ShowToastPacket",
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiClientPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiClientPacketContext;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
@@ -687,7 +686,6 @@ class PiPacketProcessorTest {
                 "    this.priority = priority;",
                 "    this.title = title;",
                 "  }",
-                "  @Override protected void handle(PiClientPacketContext context) { }",
                 "}"
         );
 
@@ -709,7 +707,6 @@ class PiPacketProcessorTest {
                 "import java.io.IOException;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:checked_ctor_packet\")",
                 "public final class CheckedCtorPacket extends PiServerPacket {",
@@ -718,7 +715,6 @@ class PiPacketProcessorTest {
                 "  public CheckedCtorPacket(int count) throws IOException {",
                 "    this.count = count;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -740,7 +736,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:dual_skill\")",
                 "public final class DualSkillPacket extends PiServerPacket {",
@@ -750,7 +745,6 @@ class PiPacketProcessorTest {
                 "    this.primarySkillId = primarySkillId;",
                 "    this.secondarySkillId = secondarySkillId;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -775,7 +769,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
                 "@PiPacket(id = \"example:legacy_skill\", version = 5)",
@@ -790,7 +783,6 @@ class PiPacketProcessorTest {
                 "  static CompoundTag upgradeV4ToV5(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -813,7 +805,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "@PiPacket(id = \"example:legacy_skill\", version = 2)",
                 "public final class LegacySkillPacket extends PiServerPacket {",
@@ -823,7 +814,6 @@ class PiPacketProcessorTest {
                 "  CompoundTag upgradeV1ToV2(CompoundTag payload, PiDecodeContext context) {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -847,7 +837,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
                 "@PiPacket(id = \"example:checked_upgrade_packet\", version = 2)",
@@ -858,7 +847,6 @@ class PiPacketProcessorTest {
                 "  static CompoundTag upgradeV1ToV2(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) throws IOException {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -883,7 +871,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
@@ -899,7 +886,6 @@ class PiPacketProcessorTest {
                 "  static CompoundTag upgradeV1ToV2(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -921,7 +907,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
                 "@PiPacket(id = \"example:legacy_skill\", version = 3)",
@@ -932,7 +917,6 @@ class PiPacketProcessorTest {
                 "  static CompoundTag upgradeV1ToV4(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -955,7 +939,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
                 "@PiPacket(id = \"example:legacy_skill\", version = 3)",
@@ -966,7 +949,6 @@ class PiPacketProcessorTest {
                 "  static CompoundTag upgradeV3ToV4(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -989,7 +971,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
                 "@PiPacket(id = \"example:invalid_packet_migration_bounds\", version = 2)",
@@ -1000,7 +981,6 @@ class PiPacketProcessorTest {
                 "  static CompoundTag upgradeV0ToV0(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1021,7 +1001,6 @@ class PiPacketProcessorTest {
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiDecodeContext;",
                 "import org.pickaid.piserializekit.api.schema.PiSchemaPayloadKind;",
                 "@PiPacket(id = \"example:legacy_skill\", version = 3)",
@@ -1036,7 +1015,6 @@ class PiPacketProcessorTest {
                 "  static CompoundTag upgradeV1ToV3(CompoundTag payload, PiSchemaPayloadKind kind, PiDecodeContext context) {",
                 "    return payload;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1058,7 +1036,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
                 "@PiPacket(id = \"example:cast_skill\")",
@@ -1067,7 +1044,6 @@ class PiPacketProcessorTest {
                 "  public CastSkillRequest(ResourceLocation skillId) {",
                 "    this.skillId = skillId;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1089,7 +1065,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
                 "@PiPacket(id = \"example:cast_skill\")",
@@ -1098,7 +1073,6 @@ class PiPacketProcessorTest {
                 "  public CastSkillRequest(ResourceLocation skillId) {",
                 "    this.skillId = skillId;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1120,7 +1094,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:cast_skill\")",
                 "public final class CastSkillRequest extends PiServerPacket {",
@@ -1128,7 +1101,6 @@ class PiPacketProcessorTest {
                 "  public CastSkillRequest(ResourceLocation __piVersion) {",
                 "    this.__piVersion = __piVersion;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1149,7 +1121,6 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
                 "@PiPacket(id = \"example:persistent_packet\")",
@@ -1159,7 +1130,6 @@ class PiPacketProcessorTest {
                 "  public PersistentPacket(int count) {",
                 "    this.count = count;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1180,7 +1150,6 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
                 "@PiPacket(id = \"example:tracking_packet\")",
@@ -1190,7 +1159,6 @@ class PiPacketProcessorTest {
                 "  public TrackingPacket(int count) {",
                 "    this.count = count;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1213,7 +1181,6 @@ class PiPacketProcessorTest {
                 "import java.util.Set;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiFieldDeltaMode;",
                 "@PiPacket(id = \"example:merge_packet\")",
@@ -1223,7 +1190,6 @@ class PiPacketProcessorTest {
                 "  public MergePacket(Set<String> tags) {",
                 "    this.tags.addAll(tags);",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1246,7 +1212,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.resources.ResourceLocation;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiSyncScope;",
                 "@PiPacket(namespace = \"example\", path = \"cast_skill\")",
@@ -1257,7 +1222,6 @@ class PiPacketProcessorTest {
                 "    this.skillId = skillId;",
                 "    this.target = target;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1300,7 +1264,6 @@ class PiPacketProcessorTest {
                 "example.ShowToastPacket",
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiClientPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiClientPacketContext;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:show_toast\")",
@@ -1310,7 +1273,6 @@ class PiPacketProcessorTest {
                 "  public ShowToastPacket(String title) {",
                 "    this.title = title;",
                 "  }",
-                "  @Override protected void handle(PiClientPacketContext context) { }",
                 "}"
         );
 
@@ -1334,7 +1296,6 @@ class PiPacketProcessorTest {
                 "import net.minecraft.world.item.ItemStack;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiFieldCodecProvider;",
                 "import org.pickaid.piserializekit.api.service.PiSerializer;",
@@ -1345,7 +1306,6 @@ class PiPacketProcessorTest {
                 "  public MismatchPacket(int count) {",
                 "    this.count = count;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "  public static final class WrongCodec implements PiFieldCodecProvider<ItemStack> {",
                 "    @Override",
                 "    public PiSerializer<ItemStack> serializer() {",
@@ -1373,7 +1333,6 @@ class PiPacketProcessorTest {
                 "import java.io.IOException;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "import org.pickaid.piserializekit.api.schema.PiFieldCodecProvider;",
                 "import org.pickaid.piserializekit.api.service.PiSerializer;",
@@ -1384,7 +1343,6 @@ class PiPacketProcessorTest {
                 "  public CheckedCtorPacket(String title) {",
                 "    this.title = title;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "  public static final class CheckedCodec implements PiFieldCodecProvider<String> {",
                 "    public CheckedCodec() throws IOException {",
                 "    }",
@@ -1413,7 +1371,6 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:private_packet\")",
                 "public final class PrivatePacket extends PiServerPacket {",
@@ -1422,7 +1379,6 @@ class PiPacketProcessorTest {
                 "  public PrivatePacket(int count) {",
                 "    this.count = count;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1443,7 +1399,6 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:static_packet\")",
                 "public final class StaticPacket extends PiServerPacket {",
@@ -1451,7 +1406,6 @@ class PiPacketProcessorTest {
                 "  public static int count;",
                 "  public StaticPacket() {",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1472,7 +1426,6 @@ class PiPacketProcessorTest {
                 "package example;",
                 "import org.pickaid.piserializekit.api.packet.PiPacket;",
                 "import org.pickaid.piserializekit.api.packet.PiServerPacket;",
-                "import org.pickaid.piserializekit.api.packet.PiServerPacketContext;",
                 "import org.pickaid.piserializekit.api.schema.PiField;",
                 "@PiPacket(id = \"example:transient_packet\")",
                 "public final class TransientPacket extends PiServerPacket {",
@@ -1481,7 +1434,6 @@ class PiPacketProcessorTest {
                 "  public TransientPacket(int count) {",
                 "    this.count = count;",
                 "  }",
-                "  @Override protected void handle(PiServerPacketContext context) { }",
                 "}"
         );
 
@@ -1499,6 +1451,12 @@ class PiPacketProcessorTest {
         JavaFileObject fileObject = compilation.generatedSourceFile(generatedType).orElseThrow();
         String source = fileObject.getCharContent(false).toString();
         assertTrue(source.contains(expectedText), () -> "Expected generated source to contain: " + expectedText + "\nActual:\n" + source);
+    }
+
+    private static void assertGeneratedDoesNotContain(Compilation compilation, String generatedType, String unexpectedText) throws Exception {
+        JavaFileObject fileObject = compilation.generatedSourceFile(generatedType).orElseThrow();
+        String source = fileObject.getCharContent(false).toString();
+        assertTrue(!source.contains(unexpectedText), () -> "Expected generated source to omit: " + unexpectedText + "\nActual:\n" + source);
     }
 
     private static void assertGeneratedResourceContains(Compilation compilation, String path, String expectedText) throws Exception {

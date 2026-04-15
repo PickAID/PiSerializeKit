@@ -303,11 +303,11 @@ class PiSchemaFieldCodecsTest {
             public PiPacketCodec<String> packetCodec() {
                 return new PiPacketCodec<>() {
                     @Override
-                    public void write(net.minecraft.network.FriendlyByteBuf buffer, String value) {
+                    public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, String value) {
                     }
 
                     @Override
-                    public String read(net.minecraft.network.FriendlyByteBuf buffer, PiDecodeContext context) {
+                    public String read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                         return "";
                     }
                 };

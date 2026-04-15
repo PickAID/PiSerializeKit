@@ -41,7 +41,7 @@ public final class PiRuntimeBindingValidation {
         validateMigrations("Pi schema", schemaId.toString(), binding.version(), requireSchemaMigrations(binding, schemaId));
     }
 
-    public static void validatePacketBinding(PiPacketBinding<?, ?> binding) {
+    public static void validatePacketBinding(PiPacketBinding<?> binding) {
         Objects.requireNonNull(binding, "binding");
         ResourceLocation packetId = requirePacketId(binding);
         if (binding.version() < 1) {
@@ -197,7 +197,7 @@ public final class PiRuntimeBindingValidation {
         return migrations;
     }
 
-    private static ResourceLocation requirePacketId(PiPacketBinding<?, ?> binding) {
+    private static ResourceLocation requirePacketId(PiPacketBinding<?> binding) {
         ResourceLocation packetId = binding.packetId();
         if (packetId == null) {
             throw new PiRuntimeBindingValidationException(
@@ -209,7 +209,7 @@ public final class PiRuntimeBindingValidation {
         return packetId;
     }
 
-    private static PiPacketDirection requirePacketDirection(PiPacketBinding<?, ?> binding, ResourceLocation packetId) {
+    private static PiPacketDirection requirePacketDirection(PiPacketBinding<?> binding, ResourceLocation packetId) {
         PiPacketDirection direction = binding.direction();
         if (direction == null) {
             throw invalidPacketBinding(
@@ -220,7 +220,7 @@ public final class PiRuntimeBindingValidation {
         return direction;
     }
 
-    private static Class<?> requirePacketType(PiPacketBinding<?, ?> binding, ResourceLocation packetId) {
+    private static Class<?> requirePacketType(PiPacketBinding<?> binding, ResourceLocation packetId) {
         Class<?> packetType = binding.packetType();
         if (packetType == null) {
             throw invalidPacketBinding(
@@ -231,7 +231,7 @@ public final class PiRuntimeBindingValidation {
         return packetType;
     }
 
-    private static void requirePacketCodec(PiPacketBinding<?, ?> binding, ResourceLocation packetId) {
+    private static void requirePacketCodec(PiPacketBinding<?> binding, ResourceLocation packetId) {
         if (binding.codec() == null) {
             throw invalidPacketBinding(
                     packetId,
@@ -240,7 +240,7 @@ public final class PiRuntimeBindingValidation {
         }
     }
 
-    private static List<PiFieldKey> requirePacketFields(PiPacketBinding<?, ?> binding, ResourceLocation packetId) {
+    private static List<PiFieldKey> requirePacketFields(PiPacketBinding<?> binding, ResourceLocation packetId) {
         List<PiFieldKey> fields = binding.fields();
         if (fields == null) {
             throw invalidPacketBinding(
@@ -251,7 +251,7 @@ public final class PiRuntimeBindingValidation {
         return fields;
     }
 
-    private static List<PiSchemaMigration> requirePacketMigrations(PiPacketBinding<?, ?> binding, ResourceLocation packetId) {
+    private static List<PiSchemaMigration> requirePacketMigrations(PiPacketBinding<?> binding, ResourceLocation packetId) {
         List<PiSchemaMigration> migrations = binding.migrations();
         if (migrations == null) {
             throw invalidPacketBinding(

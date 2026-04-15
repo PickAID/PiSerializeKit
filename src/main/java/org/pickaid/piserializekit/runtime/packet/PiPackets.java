@@ -8,10 +8,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import org.pickaid.piserializekit.api.packet.PiPacketBinding;
 import org.pickaid.piserializekit.api.packet.PiPacketProvider;
 import org.pickaid.piserializekit.api.packet.PiPacketRegistry;
+import org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeBindingValidationException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeConflictException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeLookupException;
@@ -30,29 +32,95 @@ public final class PiPackets {
     /**
      * Finds a generated packet binding by authored packet type.
      */
-    public static <T> Optional<PiPacketBinding<T, ?>> find(Class<T> type) {
+    public static <T> Optional<PiPacketBinding<T>> find(Class<T> type) {
         return REGISTRY.find(type);
     }
 
     /**
      * Requires a generated packet binding by authored packet type.
      */
-    public static <T> PiPacketBinding<T, ?> require(Class<T> type) {
+    public static <T> PiPacketBinding<T> require(Class<T> type) {
         return REGISTRY.require(type);
     }
 
     /**
      * Finds a generated packet binding by stable packet id.
      */
-    public static Optional<PiPacketBinding<?, ?>> find(ResourceLocation packetId) {
+    public static Optional<PiPacketBinding<?>> find(ResourceLocation packetId) {
         return REGISTRY.find(packetId);
     }
 
     /**
      * Requires a generated packet binding by stable packet id.
      */
-    public static PiPacketBinding<?, ?> require(ResourceLocation packetId) {
+    public static PiPacketBinding<?> require(ResourceLocation packetId) {
         return REGISTRY.require(packetId);
+    }
+
+    /**
+     * Returns the stable packet id declared for one packet type.
+     */
+    public static ResourceLocation packetId(Class<?> type) {
+        Objects.requireNonNull(type, "type");
+        return requireTyped(type).packetId();
+    }
+
+    /**
+     * Returns the declared packet version for one packet type.
+     */
+    public static int version(Class<?> type) {
+        Objects.requireNonNull(type, "type");
+        return requireTyped(type).version();
+    }
+
+    /**
+     * Encodes one packet value using its generated binding.
+     */
+    public static void write(FriendlyByteBuf buffer, Object packet) {
+        Objects.requireNonNull(buffer, "buffer");
+        Objects.requireNonNull(packet, "packet");
+        writeTyped(buffer, packet);
+    }
+
+    /**
+     * Encodes one packet value through the stable packet-buffer surface.
+     */
+    public static void write(PiPacketBuffer buffer, Object packet) {
+        Objects.requireNonNull(buffer, "buffer");
+        Objects.requireNonNull(packet, "packet");
+        writeTyped(buffer, packet);
+    }
+
+    /**
+     * Decodes one packet through the generated binding for the requested type.
+     */
+    public static <T> T read(Class<T> type, FriendlyByteBuf buffer) {
+        Objects.requireNonNull(buffer, "buffer");
+        return require(type).codec().read(buffer);
+    }
+
+    /**
+     * Decodes one packet through the generated binding for the requested type using the stable packet-buffer surface.
+     */
+    public static <T> T read(Class<T> type, PiPacketBuffer buffer) {
+        Objects.requireNonNull(buffer, "buffer");
+        return require(type).portableCodec().read(buffer);
+    }
+
+    /**
+     * Decodes one packet through the generated binding for the requested packet id.
+     */
+    public static Object read(ResourceLocation packetId, FriendlyByteBuf buffer) {
+        Objects.requireNonNull(buffer, "buffer");
+        return require(packetId).codec().read(buffer);
+    }
+
+    /**
+     * Decodes one packet through the generated binding for the requested packet id using the stable packet-buffer surface.
+     */
+    public static Object read(ResourceLocation packetId, PiPacketBuffer buffer) {
+        Objects.requireNonNull(buffer, "buffer");
+        return require(packetId).portableCodec().read(buffer);
     }
 
     /**
@@ -69,13 +137,30 @@ public final class PiPackets {
         return REGISTRY.packetTypes();
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T> void writeTyped(FriendlyByteBuf buffer, Object packet) {
+        Class<T> type = (Class<T>) packet.getClass();
+        require(type).codec().write(buffer, type.cast(packet));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> void writeTyped(PiPacketBuffer buffer, Object packet) {
+        Class<T> type = (Class<T>) packet.getClass();
+        require(type).portableCodec().write(buffer, type.cast(packet));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static PiPacketBinding<?> requireTyped(Class<?> type) {
+        return require((Class) type);
+    }
+
     private static final class ServiceLoaderRegistry implements PiPacketRegistry {
-        private final Map<Class<?>, PiPacketBinding<?, ?>> bindingsByType = new ConcurrentHashMap<>();
-        private final Map<ResourceLocation, PiPacketBinding<?, ?>> bindingsById = new ConcurrentHashMap<>();
+        private final Map<Class<?>, PiPacketBinding<?>> bindingsByType = new ConcurrentHashMap<>();
+        private final Map<ResourceLocation, PiPacketBinding<?>> bindingsById = new ConcurrentHashMap<>();
         private volatile boolean loaded;
 
         @Override
-        public <T> void register(Class<T> type, PiPacketBinding<T, ?> binding) {
+        public <T> void register(Class<T> type, PiPacketBinding<T> binding) {
             Objects.requireNonNull(type, "type");
             Objects.requireNonNull(binding, "binding");
             PiRuntimeBindingValidation.validatePacketBinding(binding);
@@ -88,7 +173,7 @@ public final class PiPackets {
                         "Binding packet type mismatch: " + type.getName() + " != " + binding.packetType().getName()
                 );
             }
-            PiPacketBinding<?, ?> previousByType = bindingsByType.putIfAbsent(type, binding);
+            PiPacketBinding<?> previousByType = bindingsByType.putIfAbsent(type, binding);
             if (previousByType != null && previousByType != binding) {
                 throw new PiRuntimeConflictException(
                         "packet-type",
@@ -98,7 +183,7 @@ public final class PiPackets {
                                 + ", conflicting packet id " + packetId
                 );
             }
-            PiPacketBinding<?, ?> previousById = bindingsById.putIfAbsent(packetId, binding);
+            PiPacketBinding<?> previousById = bindingsById.putIfAbsent(packetId, binding);
             if (previousById != null && previousById != binding) {
                 throw new PiRuntimeConflictException(
                         "packet-id",
@@ -111,9 +196,9 @@ public final class PiPackets {
         }
 
         @Override
-        public <T> Optional<PiPacketBinding<T, ?>> find(Class<T> type) {
+        public <T> Optional<PiPacketBinding<T>> find(Class<T> type) {
             ensureLoaded();
-            PiPacketBinding<?, ?> binding = bindingsByType.get(Objects.requireNonNull(type, "type"));
+            PiPacketBinding<?> binding = bindingsByType.get(Objects.requireNonNull(type, "type"));
             if (binding == null) {
                 return Optional.empty();
             }
@@ -121,7 +206,7 @@ public final class PiPackets {
         }
 
         @Override
-        public <T> PiPacketBinding<T, ?> require(Class<T> type) {
+        public <T> PiPacketBinding<T> require(Class<T> type) {
             return find(type).orElseThrow(() -> new PiRuntimeLookupException(
                     "packet-type",
                     type.getName(),
@@ -132,13 +217,13 @@ public final class PiPackets {
         }
 
         @Override
-        public Optional<PiPacketBinding<?, ?>> find(ResourceLocation packetId) {
+        public Optional<PiPacketBinding<?>> find(ResourceLocation packetId) {
             ensureLoaded();
             return Optional.ofNullable(bindingsById.get(Objects.requireNonNull(packetId, "packetId")));
         }
 
         @Override
-        public PiPacketBinding<?, ?> require(ResourceLocation packetId) {
+        public PiPacketBinding<?> require(ResourceLocation packetId) {
             return find(packetId).orElseThrow(() -> new PiRuntimeLookupException(
                     "packet-id",
                     packetId.toString(),
@@ -177,8 +262,8 @@ public final class PiPackets {
         }
 
         @SuppressWarnings("unchecked")
-        private static <T> PiPacketBinding<T, ?> castBinding(PiPacketBinding<?, ?> binding) {
-            return (PiPacketBinding<T, ?>) binding;
+        private static <T> PiPacketBinding<T> castBinding(PiPacketBinding<?> binding) {
+            return (PiPacketBinding<T>) binding;
         }
 
         private String describeKnownPacketIds() {

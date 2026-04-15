@@ -2,6 +2,8 @@ package org.pickaid.piserializekit.api.packet;
 
 import java.util.List;
 import net.minecraft.resources.ResourceLocation;
+import org.pickaid.piserializekit.api.packet.buffer.PiPacketCodecs;
+import org.pickaid.piserializekit.api.packet.buffer.PiPortablePacketCodec;
 import org.pickaid.piserializekit.api.schema.PiFieldKey;
 import org.pickaid.piserializekit.api.schema.PiSchemaMigration;
 
@@ -9,9 +11,8 @@ import org.pickaid.piserializekit.api.schema.PiSchemaMigration;
  * Generated runtime binding for one packet type.
  *
  * @param <T> packet type
- * @param <C> dispatch context type
  */
-public interface PiPacketBinding<T, C extends PiPacketContext> {
+public interface PiPacketBinding<T> {
     /**
      * Returns the stable packet id consumed by transport/runtime layers.
      */
@@ -28,7 +29,7 @@ public interface PiPacketBinding<T, C extends PiPacketContext> {
     PiPacketDirection direction();
 
     /**
-     * Returns the authored packet class.
+     * Returns the declared packet class.
      */
     Class<T> packetType();
 
@@ -38,7 +39,7 @@ public interface PiPacketBinding<T, C extends PiPacketContext> {
     List<PiFieldKey> fields();
 
     /**
-     * Returns binding-local packet payload migrations in authored order.
+     * Returns binding-local packet payload migrations in declared order.
      */
     default List<PiSchemaMigration> migrations() {
         return List.of();
@@ -50,7 +51,9 @@ public interface PiPacketBinding<T, C extends PiPacketContext> {
     PiPacketCodec<T> codec();
 
     /**
-     * Dispatches the decoded packet into its typed handler path.
+     * Returns the generated packet codec through the stable packet-buffer surface.
      */
-    void dispatch(T packet, C context);
+    default PiPortablePacketCodec<T> portableCodec() {
+        return PiPacketCodecs.portable(codec());
+    }
 }

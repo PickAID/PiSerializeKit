@@ -8,10 +8,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeBindingValidationException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeConflictException;
 import org.pickaid.piserializekit.api.runtime.PiRuntimeLookupException;
+import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.schema.PiSchemaProvider;
 import org.pickaid.piserializekit.api.schema.PiSchemaRegistry;
 import org.pickaid.piserializekit.api.schema.PiStateBinding;
@@ -53,6 +55,49 @@ public final class PiSchemas {
     }
 
     /**
+     * Serializes one state through its generated binding.
+     */
+    public static CompoundTag saveFull(Object state) {
+        Objects.requireNonNull(state, "state");
+        return saveFullTyped(state);
+    }
+
+    /**
+     * Serializes the default client projection through the generated binding.
+     */
+    public static CompoundTag saveClientView(Object state) {
+        Objects.requireNonNull(state, "state");
+        return saveClientViewTyped(state);
+    }
+
+    /**
+     * Serializes the persisted projection through the generated binding.
+     */
+    public static CompoundTag savePersisted(Object state) {
+        Objects.requireNonNull(state, "state");
+        return savePersistedTyped(state);
+    }
+
+    /**
+     * Creates a new state instance and loads a full payload through its generated binding.
+     */
+    public static <T> T loadFull(Class<T> type, CompoundTag tag) {
+        return loadFull(type, tag, PiDecodeContext.strict());
+    }
+
+    /**
+     * Creates a new state instance and loads a full payload through its generated binding.
+     */
+    public static <T> T loadFull(Class<T> type, CompoundTag tag, PiDecodeContext context) {
+        Objects.requireNonNull(tag, "tag");
+        Objects.requireNonNull(context, "context");
+        PiStateBinding<T> binding = require(type);
+        T state = binding.newState();
+        binding.loadFull(state, tag, context);
+        return state;
+    }
+
+    /**
      * Returns all known schema ids in stable order for diagnostics and tooling.
      */
     public static List<ResourceLocation> schemaIds() {
@@ -64,6 +109,24 @@ public final class PiSchemas {
      */
     public static List<Class<?>> stateTypes() {
         return REGISTRY.stateTypes();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> CompoundTag saveFullTyped(Object state) {
+        Class<T> type = (Class<T>) state.getClass();
+        return require(type).saveFull(type.cast(state));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> CompoundTag saveClientViewTyped(Object state) {
+        Class<T> type = (Class<T>) state.getClass();
+        return require(type).saveClientView(type.cast(state));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> CompoundTag savePersistedTyped(Object state) {
+        Class<T> type = (Class<T>) state.getClass();
+        return require(type).savePersisted(type.cast(state));
     }
 
     private static final class ServiceLoaderRegistry implements PiSchemaRegistry {

@@ -46,12 +46,12 @@ public final class TrimmedStringCodec implements PiFieldCodecProvider<String> {
                 },
                 new PiPacketCodec<>() {
                     @Override
-                    public void write(FriendlyByteBuf buffer, String value) {
+                    public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, String value) {
                         buffer.writeUtf(value);
                     }
 
                     @Override
-                    public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                    public String read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                         return PiPacketSupport.safeRead(context, "", () -> buffer.readUtf().trim(), "");
                     }
                 }

@@ -1,10 +1,12 @@
 package org.pickaid.piserializekit.runtime.schema;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.List;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
@@ -22,6 +24,25 @@ import org.pickaid.piserializekit.runtime.schema.registry.PiSchemas;
 import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 
 class PiSchemasTest {
+    @Test
+    void convenienceSaveAndLoadUseStateTypeBinding() throws Exception {
+        GeneratedProjectionState source = new GeneratedProjectionState();
+        source.phase = 3;
+        source.rewardLabel = "boss";
+        source.menuPage = 5;
+        Method saveFull = PiSchemas.class.getMethod("saveFull", Object.class);
+        Method loadFull = PiSchemas.class.getMethod("loadFull", Class.class, CompoundTag.class);
+
+        CompoundTag tag = (CompoundTag) saveFull.invoke(null, source);
+        Object decoded = loadFull.invoke(null, GeneratedProjectionState.class, tag);
+
+        assertNotNull(decoded);
+        assertTrue(decoded instanceof GeneratedProjectionState);
+        assertEquals(3, ((GeneratedProjectionState) decoded).phase);
+        assertEquals("boss", ((GeneratedProjectionState) decoded).rewardLabel);
+        assertEquals(5, ((GeneratedProjectionState) decoded).menuPage);
+    }
+
     @Test
     void resolvesBindingByStateTypeThroughServiceLoader() {
         PiStateBinding<TestSchemaProvider.TestState> binding = PiSchemas.require(TestSchemaProvider.TestState.class);

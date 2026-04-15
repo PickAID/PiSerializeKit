@@ -18,12 +18,12 @@ import net.minecraft.nbt.NumericTag;
 import net.minecraft.nbt.ShortTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.pickaid.piserializekit.api.nbt.PiNbtCodec;
-import org.pickaid.piserializekit.api.packet.PiPacketCodec;
+import org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer;
+import org.pickaid.piserializekit.api.packet.buffer.PiPortablePacketCodec;
 import org.pickaid.piserializekit.api.schema.PiDecodeContext;
 import org.pickaid.piserializekit.api.service.PiSerializer;
 import org.pickaid.piserializekit.api.service.PiSerializeService;
@@ -105,161 +105,161 @@ public final class PiBuiltInSerializers {
         service.register(type, serializer);
     }
 
-    private static final class ByteCodec implements PiPacketCodec<Byte> {
+    private static final class ByteCodec implements PiPortablePacketCodec<Byte> {
         @Override
-        public void write(FriendlyByteBuf buffer, Byte value) {
+        public void write(PiPacketBuffer buffer, Byte value) {
             buffer.writeByte(value);
         }
 
         @Override
-        public Byte read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Byte read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readByte, (byte) 0);
         }
     }
 
-    private static final class ShortCodec implements PiPacketCodec<Short> {
+    private static final class ShortCodec implements PiPortablePacketCodec<Short> {
         @Override
-        public void write(FriendlyByteBuf buffer, Short value) {
+        public void write(PiPacketBuffer buffer, Short value) {
             buffer.writeShort(value);
         }
 
         @Override
-        public Short read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Short read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readShort, (short) 0);
         }
     }
 
-    private static final class VarIntCodec implements PiPacketCodec<Integer> {
+    private static final class VarIntCodec implements PiPortablePacketCodec<Integer> {
         @Override
-        public void write(FriendlyByteBuf buffer, Integer value) {
+        public void write(PiPacketBuffer buffer, Integer value) {
             buffer.writeVarInt(value);
         }
 
         @Override
-        public Integer read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Integer read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readVarInt, 0);
         }
     }
 
-    private static final class VarLongCodec implements PiPacketCodec<Long> {
+    private static final class VarLongCodec implements PiPortablePacketCodec<Long> {
         @Override
-        public void write(FriendlyByteBuf buffer, Long value) {
+        public void write(PiPacketBuffer buffer, Long value) {
             buffer.writeVarLong(value);
         }
 
         @Override
-        public Long read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Long read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readVarLong, 0L);
         }
     }
 
-    private static final class BooleanCodec implements PiPacketCodec<Boolean> {
+    private static final class BooleanCodec implements PiPortablePacketCodec<Boolean> {
         @Override
-        public void write(FriendlyByteBuf buffer, Boolean value) {
+        public void write(PiPacketBuffer buffer, Boolean value) {
             buffer.writeBoolean(value);
         }
 
         @Override
-        public Boolean read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Boolean read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readBoolean, false);
         }
     }
 
-    private static final class FloatCodec implements PiPacketCodec<Float> {
+    private static final class FloatCodec implements PiPortablePacketCodec<Float> {
         @Override
-        public void write(FriendlyByteBuf buffer, Float value) {
+        public void write(PiPacketBuffer buffer, Float value) {
             buffer.writeFloat(value);
         }
 
         @Override
-        public Float read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Float read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readFloat, 0F);
         }
     }
 
-    private static final class DoubleCodec implements PiPacketCodec<Double> {
+    private static final class DoubleCodec implements PiPortablePacketCodec<Double> {
         @Override
-        public void write(FriendlyByteBuf buffer, Double value) {
+        public void write(PiPacketBuffer buffer, Double value) {
             buffer.writeDouble(value);
         }
 
         @Override
-        public Double read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Double read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readDouble, 0D);
         }
     }
 
-    private static final class StringCodec implements PiPacketCodec<String> {
+    private static final class StringCodec implements PiPortablePacketCodec<String> {
         @Override
-        public void write(FriendlyByteBuf buffer, String value) {
+        public void write(PiPacketBuffer buffer, String value) {
             buffer.writeUtf(value);
         }
 
         @Override
-        public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public String read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readUtf, "");
         }
     }
 
-    private static final class UuidCodec implements PiPacketCodec<UUID> {
+    private static final class UuidCodec implements PiPortablePacketCodec<UUID> {
         @Override
-        public void write(FriendlyByteBuf buffer, UUID value) {
-            buffer.writeUUID(value);
+        public void write(PiPacketBuffer buffer, UUID value) {
+            buffer.writeUuid(value);
         }
 
         @Override
-        public UUID read(FriendlyByteBuf buffer, PiDecodeContext context) {
-            return PiPacketSupport.safeRead(context, "", buffer::readUUID, new UUID(0L, 0L));
+        public UUID read(PiPacketBuffer buffer, PiDecodeContext context) {
+            return PiPacketSupport.safeRead(context, "", buffer::readUuid, new UUID(0L, 0L));
         }
     }
 
-    private static final class ResourceLocationCodec implements PiPacketCodec<ResourceLocation> {
+    private static final class ResourceLocationCodec implements PiPortablePacketCodec<ResourceLocation> {
         @Override
-        public void write(FriendlyByteBuf buffer, ResourceLocation value) {
+        public void write(PiPacketBuffer buffer, ResourceLocation value) {
             buffer.writeResourceLocation(value);
         }
 
         @Override
-        public ResourceLocation read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public ResourceLocation read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readResourceLocation, null);
         }
     }
 
-    private static final class CompoundTagCodec implements PiPacketCodec<CompoundTag> {
+    private static final class CompoundTagCodec implements PiPortablePacketCodec<CompoundTag> {
         @Override
-        public void write(FriendlyByteBuf buffer, CompoundTag value) {
+        public void write(PiPacketBuffer buffer, CompoundTag value) {
             buffer.writeNbt(value);
         }
 
         @Override
-        public CompoundTag read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public CompoundTag read(PiPacketBuffer buffer, PiDecodeContext context) {
             CompoundTag tag = PiPacketSupport.safeRead(context, "", buffer::readNbt, new CompoundTag());
             return tag == null ? new CompoundTag() : tag;
         }
     }
 
-    private static final class BlockPosCodec implements PiPacketCodec<BlockPos> {
+    private static final class BlockPosCodec implements PiPortablePacketCodec<BlockPos> {
         @Override
-        public void write(FriendlyByteBuf buffer, BlockPos value) {
+        public void write(PiPacketBuffer buffer, BlockPos value) {
             buffer.writeBlockPos(value);
         }
 
         @Override
-        public BlockPos read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public BlockPos read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(context, "", buffer::readBlockPos, BlockPos.ZERO);
         }
     }
 
-    private static final class Vec3Codec implements PiPacketCodec<Vec3> {
+    private static final class Vec3Codec implements PiPortablePacketCodec<Vec3> {
         @Override
-        public void write(FriendlyByteBuf buffer, Vec3 value) {
+        public void write(PiPacketBuffer buffer, Vec3 value) {
             buffer.writeDouble(value.x);
             buffer.writeDouble(value.y);
             buffer.writeDouble(value.z);
         }
 
         @Override
-        public Vec3 read(FriendlyByteBuf buffer, PiDecodeContext context) {
+        public Vec3 read(PiPacketBuffer buffer, PiDecodeContext context) {
             return PiPacketSupport.safeRead(
                     context,
                     "",
@@ -269,15 +269,19 @@ public final class PiBuiltInSerializers {
         }
     }
 
-    private static final class ItemStackCodec implements PiPacketCodec<ItemStack> {
+    private static final class ItemStackCodec implements PiPortablePacketCodec<ItemStack> {
         @Override
-        public void write(FriendlyByteBuf buffer, ItemStack value) {
-            buffer.writeItem(value);
+        public void write(PiPacketBuffer buffer, ItemStack value) {
+            buffer.writeNbt(value.save(new CompoundTag()));
         }
 
         @Override
-        public ItemStack read(FriendlyByteBuf buffer, PiDecodeContext context) {
-            return PiPacketSupport.safeRead(context, "", buffer::readItem, ItemStack.EMPTY);
+        public ItemStack read(PiPacketBuffer buffer, PiDecodeContext context) {
+            CompoundTag tag = PiPacketSupport.safeRead(context, "", buffer::readNbt, new CompoundTag());
+            if (tag == null || tag.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+            return PiPacketSupport.safeRead(context, "", () -> ItemStack.of(tag.copy()), ItemStack.EMPTY);
         }
     }
 

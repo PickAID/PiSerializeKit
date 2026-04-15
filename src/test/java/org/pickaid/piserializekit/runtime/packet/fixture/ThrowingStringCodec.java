@@ -39,12 +39,12 @@ public final class ThrowingStringCodec implements PiFieldCodecProvider<String> {
             public PiPacketCodec<String> packetCodec() {
                 return new PiPacketCodec<>() {
                     @Override
-                    public void write(FriendlyByteBuf buffer, String value) {
+                    public void write(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, String value) {
                         buffer.writeUtf(value);
                     }
 
                     @Override
-                    public String read(FriendlyByteBuf buffer, PiDecodeContext context) {
+                    public String read(org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer buffer, PiDecodeContext context) {
                         throw new IllegalStateException("   ");
                     }
                 };

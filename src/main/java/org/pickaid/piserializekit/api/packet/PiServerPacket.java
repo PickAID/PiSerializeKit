@@ -1,12 +1,10 @@
 package org.pickaid.piserializekit.api.packet;
 
 /**
- * Base type for serverbound packets on the common author path.
+ * Base type for serverbound packets on the common path.
  */
-public abstract class PiServerPacket {
+public abstract class PiServerPacket extends PiPacketBase {
     public final PiPacketDirection direction() {
         return PiPacketDirection.SERVERBOUND;
     }
-
-    protected abstract void handle(PiServerPacketContext context);
 }

@@ -35,13 +35,12 @@ public final class PiProcessorPacketGenerationSupport {
                 writer.write("import net.minecraft.nbt.CompoundTag;\n");
                 writer.write("import net.minecraft.network.FriendlyByteBuf;\n");
                 writer.write("import net.minecraft.resources.ResourceLocation;\n");
-                writer.write("import org.pickaid.piserializekit.api.packet.PiClientPacketContext;\n");
                 writer.write("import org.pickaid.piserializekit.api.packet.PiPacketBinding;\n");
                 writer.write("import org.pickaid.piserializekit.api.packet.PiPacketCodec;\n");
-                writer.write("import org.pickaid.piserializekit.api.packet.PiPacketContext;\n");
                 writer.write("import org.pickaid.piserializekit.api.packet.PiPacketDecodeException;\n");
                 writer.write("import org.pickaid.piserializekit.api.packet.PiPacketDirection;\n");
-                writer.write("import org.pickaid.piserializekit.api.packet.PiServerPacketContext;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffer;\n");
+                writer.write("import org.pickaid.piserializekit.api.packet.buffer.PiPacketBuffers;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiDecodeContext;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiDecodeIssueCode;\n");
                 writer.write("import org.pickaid.piserializekit.api.schema.PiFieldKey;\n");
@@ -74,14 +73,14 @@ public final class PiProcessorPacketGenerationSupport {
                 writeMigrationConstant(writer, typeElement, packetSpec.migrations());
                 writer.write("    public static final PiPacketCodec<" + typeName + "> CODEC = new PiPacketCodec<>() {\n");
                 writer.write("        @Override\n");
-                writer.write("        public void write(FriendlyByteBuf buffer, " + typeName + " value) {\n");
+                writer.write("        public void write(PiPacketBuffer buffer, " + typeName + " value) {\n");
                 writer.write("            buffer.writeVarInt(VERSION);\n");
                 for (PiFieldSpec field : packetSpec.fields()) {
                     writer.write("            " + packetSerializerConstantName(field) + ".packetCodec().write(buffer, value." + field.fieldName() + ");\n");
                 }
                 writer.write("        }\n\n");
                 writer.write("        @Override\n");
-                writer.write("        public " + typeName + " read(FriendlyByteBuf buffer, PiDecodeContext context) {\n");
+                writer.write("        public " + typeName + " read(PiPacketBuffer buffer, PiDecodeContext context) {\n");
                 writer.write("            int incomingVersion = PiPacketSupport.safeRead(context, PiSchemaSupport.SCHEMA_VERSION_KEY, buffer::readVarInt, VERSION);\n");
                 writer.write("            boolean legacy = incomingVersion < VERSION;\n");
                 for (PiFieldSpec field : packetSpec.fields()) {
@@ -122,7 +121,7 @@ public final class PiProcessorPacketGenerationSupport {
                 writer.write("            PiDecodeContext context = PiDecodeContext.strict();\n");
                 writer.write("            " + typeName + " packet;\n");
                 writer.write("            try {\n");
-                writer.write("                packet = read(buffer, context);\n");
+                writer.write("                packet = read(PiPacketBuffers.wrap(buffer), context);\n");
                 writer.write("            } catch (RuntimeException exception) {\n");
                 writer.write("                context.issue(PiDecodeIssueCode.SERIALIZER_FAILURE, \"\", PiSchemaSupport.describeException(exception, \"packet decode failed\"), true);\n");
                 writer.write("                packet = null;\n");
@@ -133,8 +132,7 @@ public final class PiProcessorPacketGenerationSupport {
                 writer.write("            return packet;\n");
                 writer.write("        }\n");
                 writer.write("    };\n\n");
-                writer.write("    public static final PiPacketBinding<" + typeName + ", " + packetSpec.direction().contextType()
-                        + "> BINDING = new PiPacketBinding<>() {\n");
+                writer.write("    public static final PiPacketBinding<" + typeName + "> BINDING = new PiPacketBinding<>() {\n");
                 writer.write("        @Override\n");
                 writer.write("        public ResourceLocation packetId() {\n");
                 writer.write("            return PACKET_ID;\n");
@@ -163,10 +161,6 @@ public final class PiProcessorPacketGenerationSupport {
                 writer.write("        public PiPacketCodec<" + typeName + "> codec() {\n");
                 writer.write("            return CODEC;\n");
                 writer.write("        }\n\n");
-                writer.write("        @Override\n");
-                writer.write("        public void dispatch(" + typeName + " packet, " + packetSpec.direction().contextType() + " context) {\n");
-                writer.write("            packet.handle(context);\n");
-                writer.write("        }\n");
                 writer.write("    };\n\n");
                 writer.write("    private static <T> PiSerializer<T> requireSerializer(PiSerializerType<T> type) {\n");
                 writer.write("        return PiSerializeServices.requireSerializer(type);\n");
