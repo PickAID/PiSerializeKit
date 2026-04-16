@@ -101,6 +101,10 @@ public final class PiProcessorTypeSupport {
         return null;
     }
 
+    public static boolean isParameterizedDeclaredType(TypeMirror type) {
+        return type instanceof DeclaredType declaredType && !declaredType.getTypeArguments().isEmpty();
+    }
+
     public static String boxedTypeName(Types types, TypeMirror type) {
         if (type.getKind().isPrimitive()) {
             TypeElement boxed = types.boxedClass((PrimitiveType) type);

@@ -362,6 +362,14 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             );
             return null;
         }
+        if (PiProcessorTypeSupport.isParameterizedDeclaredType(stateTypeMirror)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiLivingService types must resolve to a non-parameterized concrete state type",
+                    typeElement
+            );
+            return null;
+        }
         Element stateElement = processingEnv.getTypeUtils().asElement(stateTypeMirror);
         String stateQualifiedName = stateTypeMirror.toString();
         String stateSimpleName = stateElement instanceof TypeElement stateTypeElement

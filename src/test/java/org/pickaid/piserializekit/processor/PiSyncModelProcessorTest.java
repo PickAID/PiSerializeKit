@@ -1891,6 +1891,66 @@ class PiSyncModelProcessorTest {
     }
 
     @Test
+    void rejectsLivingServiceWithParameterizedInferredStateType() {
+        JavaFileObject annotation = JavaFileObjects.forSourceLines(
+                "org.pickaid.pibrary.api.service.PiLivingService",
+                "package org.pickaid.pibrary.api.service;",
+                "import java.lang.annotation.ElementType;",
+                "import java.lang.annotation.Retention;",
+                "import java.lang.annotation.RetentionPolicy;",
+                "import java.lang.annotation.Target;",
+                "@Retention(RetentionPolicy.SOURCE)",
+                "@Target(ElementType.TYPE)",
+                "public @interface PiLivingService {",
+                "  String namespace();",
+                "  String path();",
+                "}"
+        );
+        JavaFileObject context = JavaFileObjects.forSourceLines(
+                "org.pickaid.pibrary.api.service.PiLivingServiceContext",
+                "package org.pickaid.pibrary.api.service;",
+                "public final class PiLivingServiceContext {",
+                "}"
+        );
+        JavaFileObject base = JavaFileObjects.forSourceLines(
+                "org.pickaid.pibrary.api.service.PiStateLivingEntityService",
+                "package org.pickaid.pibrary.api.service;",
+                "public abstract class PiStateLivingEntityService<S> {",
+                "  protected PiStateLivingEntityService(PiLivingServiceContext context) {",
+                "  }",
+                "}"
+        );
+        JavaFileObject state = JavaFileObjects.forSourceLines(
+                "example.ExampleState",
+                "package example;",
+                "public final class ExampleState<T> {",
+                "}"
+        );
+        JavaFileObject service = JavaFileObjects.forSourceLines(
+                "example.ComboService",
+                "package example;",
+                "import org.pickaid.pibrary.api.service.PiLivingService;",
+                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
+                "import org.pickaid.pibrary.api.service.PiStateLivingEntityService;",
+                "@PiLivingService(namespace = \"example\", path = \"combo\")",
+                "public final class ComboService extends PiStateLivingEntityService<ExampleState<String>> {",
+                "  public ComboService(PiLivingServiceContext context) {",
+                "    super(context);",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(annotation, context, base, state, service);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining(
+                "@PiLivingService types must resolve to a non-parameterized concrete state type"
+        );
+    }
+
+    @Test
     void rejectsNestedLivingServiceTypesBeforeCodeGeneration() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.api.service.PiLivingService",
