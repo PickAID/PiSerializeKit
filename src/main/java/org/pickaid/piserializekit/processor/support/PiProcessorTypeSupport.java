@@ -83,6 +83,24 @@ public final class PiProcessorTypeSupport {
         return isConcreteType(typeArgument) ? typeArgument : null;
     }
 
+    public static TypeMirror resolveConcreteTypeArgumentInHierarchy(
+            Types types,
+            TypeMirror leafType,
+            String targetQualifiedName,
+            int index
+    ) {
+        if (sameErasure(types, leafType, targetQualifiedName)) {
+            return resolveConcreteTypeArgument(leafType, index);
+        }
+        for (TypeMirror superType : types.directSupertypes(leafType)) {
+            TypeMirror resolved = resolveConcreteTypeArgumentInHierarchy(types, superType, targetQualifiedName, index);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+        return null;
+    }
+
     public static String boxedTypeName(Types types, TypeMirror type) {
         if (type.getKind().isPrimitive()) {
             TypeElement boxed = types.boxedClass((PrimitiveType) type);

@@ -46,6 +46,7 @@ import org.pickaid.piserializekit.processor.support.PiProcessorPacketAuthoringSu
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorServiceFileSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
 
 @SupportedAnnotationTypes({
         "org.pickaid.piserializekit.api.schema.PiSyncModel",
@@ -71,6 +72,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private static final String GENERATED_LIVING_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.runtime.service.PiGeneratedLivingServiceDescriptor";
     private static final String LIVING_SERVICE_PROVIDER = "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider";
     private static final String LIVING_SERVICE_REGISTRY = "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry";
+    private static final String STATEFUL_LIVING_SERVICE_BASE = "org.pickaid.pibrary.api.service.PiStateLivingEntityService";
     private static final String FIELD_ANNOTATION = PiField.class.getName();
     private static final String INFERRED_FIELD_CODEC = PiInferredFieldCodec.class.getName();
 
@@ -338,11 +340,24 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         Map<String, AnnotationValue> values = annotationSupport.annotationValues(mirror);
         String namespace = annotationSupport.stringValue(values, "namespace");
         String path = annotationSupport.stringValue(values, "path");
-        TypeMirror stateTypeMirror = annotationSupport.typeValue(values, "state");
-        if (namespace == null || path == null || stateTypeMirror == null) {
+        if (namespace == null || path == null) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLivingService requires namespace, path, and state values",
+                    "@PiLivingService requires namespace and path values",
+                    typeElement
+            );
+            return null;
+        }
+        TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
+                processingEnv.getTypeUtils(),
+                typeElement.asType(),
+                STATEFUL_LIVING_SERVICE_BASE,
+                0
+        );
+        if (stateTypeMirror == null) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiLivingService types must extend PiStateLivingEntityService<S> with a concrete state type",
                     typeElement
             );
             return null;
