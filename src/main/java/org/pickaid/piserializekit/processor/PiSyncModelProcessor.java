@@ -29,6 +29,7 @@ import org.pickaid.piserializekit.api.schema.PiSyncModel;
 import org.pickaid.piserializekit.processor.migration.PiMigrationCollectionResult;
 import org.pickaid.piserializekit.processor.migration.PiMigrationValidationFailure;
 import org.pickaid.piserializekit.processor.model.PiAfterDecodeSpec;
+import org.pickaid.piserializekit.processor.model.PiLevelServiceSpec;
 import org.pickaid.piserializekit.processor.model.PiFieldSpec;
 import org.pickaid.piserializekit.processor.model.PiLivingServiceSpec;
 import org.pickaid.piserializekit.processor.model.PiMigrationPlan;
@@ -38,6 +39,7 @@ import org.pickaid.piserializekit.processor.model.PiSchemaIdentity;
 import org.pickaid.piserializekit.processor.support.PiProcessorAnnotationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorExecutableSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorFieldAuthoringSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorLevelGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorLivingGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorMigrationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorNames;
@@ -55,7 +57,8 @@ import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
         "org.pickaid.piserializekit.api.schema.PiSchemaUpgrade",
         "org.pickaid.piserializekit.api.packet.PiPacket",
         "org.pickaid.piserializekit.api.packet.PiPacketUpgrade",
-        "org.pickaid.pibrary.api.service.PiLivingService"
+        "org.pickaid.pibrary.api.service.PiLivingService",
+        "org.pickaid.pibrary.api.service.PiLevelService"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 public final class PiSyncModelProcessor extends AbstractProcessor {
@@ -73,12 +76,19 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private static final String LIVING_SERVICE_PROVIDER = "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider";
     private static final String LIVING_SERVICE_REGISTRY = "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry";
     private static final String STATEFUL_LIVING_SERVICE_BASE = "org.pickaid.pibrary.api.service.PiStateLivingEntityService";
+    private static final String LEVEL_SERVICE_ANNOTATION = "org.pickaid.pibrary.api.service.PiLevelService";
+    private static final String LEVEL_SERVICE_CONTEXT = "org.pickaid.pibrary.api.service.PiLevelServiceContext";
+    private static final String GENERATED_LEVEL_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.runtime.level.PiGeneratedLevelServiceDescriptor";
+    private static final String LEVEL_SERVICE_PROVIDER = "org.pickaid.pibrary.runtime.level.PiLevelServiceProvider";
+    private static final String LEVEL_SERVICE_REGISTRY = "org.pickaid.pibrary.runtime.level.PiLevelServiceRegistry";
+    private static final String STATEFUL_LEVEL_SERVICE_BASE = "org.pickaid.pibrary.api.service.PiStateLevelService";
     private static final String FIELD_ANNOTATION = PiField.class.getName();
     private static final String INFERRED_FIELD_CODEC = PiInferredFieldCodec.class.getName();
 
     private final Set<String> providerTypes = new LinkedHashSet<>();
     private final Set<String> packetProviderTypes = new LinkedHashSet<>();
     private final Set<String> livingProviderTypes = new LinkedHashSet<>();
+    private final Set<String> levelProviderTypes = new LinkedHashSet<>();
     private final Map<String, String> schemaIds = new LinkedHashMap<>();
     private final Map<String, String> packetIds = new LinkedHashMap<>();
     private PiProcessorAnnotationSupport annotationSupport;
@@ -114,6 +124,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             writePacketProviderServiceFile();
             writeProviderServiceFile();
             writeLivingProviderServiceFile();
+            writeLevelProviderServiceFile();
             return false;
         }
         annotationSupport.validateAnnotationHosts(roundEnv, PACKET_ANNOTATION);
@@ -222,6 +233,33 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 }
             }
         }
+        TypeElement levelServiceAnnotation = processingEnv.getElementUtils().getTypeElement(LEVEL_SERVICE_ANNOTATION);
+        if (levelServiceAnnotation != null) {
+            for (Element element : roundEnv.getElementsAnnotatedWith(levelServiceAnnotation)) {
+                if (element instanceof TypeElement typeElement) {
+                    if (!validateConcreteClassType(typeElement, "@PiLevelService")) {
+                        continue;
+                    }
+                    PiLevelServiceSpec spec = levelServiceSpec(typeElement);
+                    if (spec != null) {
+                        PiProcessorLevelGenerationSupport.generateLevelDescriptorType(
+                                processingEnv,
+                                typeElement,
+                                spec,
+                                LEVEL_SERVICE_CONTEXT,
+                                GENERATED_LEVEL_SERVICE_DESCRIPTOR
+                        );
+                        PiProcessorLevelGenerationSupport.generateLevelProviderType(
+                                processingEnv,
+                                typeElement,
+                                levelProviderTypes,
+                                LEVEL_SERVICE_PROVIDER,
+                                LEVEL_SERVICE_REGISTRY
+                        );
+                    }
+                }
+            }
+        }
         return false;
     }
 
@@ -314,6 +352,15 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         );
     }
 
+    private void writeLevelProviderServiceFile() {
+        PiProcessorServiceFileSupport.writeServiceFile(
+                processingEnv,
+                levelProviderTypes,
+                LEVEL_SERVICE_PROVIDER,
+                "Failed to generate Pi level service provider service file"
+        );
+    }
+
     private PiLivingServiceSpec livingServiceSpec(TypeElement typeElement) {
         PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
                 PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LIVING_SERVICE_CONTEXT);
@@ -377,6 +424,71 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 : stateQualifiedName;
         String serviceSimpleName = typeElement.getSimpleName().toString();
         return new PiLivingServiceSpec(namespace, path, serviceSimpleName, stateQualifiedName, stateSimpleName);
+    }
+
+    private PiLevelServiceSpec levelServiceSpec(TypeElement typeElement) {
+        PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
+                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LEVEL_SERVICE_CONTEXT);
+        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.MISSING) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiLevelService types must declare an accessible constructor accepting PiLevelServiceContext",
+                    typeElement
+            );
+            return null;
+        }
+        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.THROWS_CHECKED) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiLevelService constructors accepting PiLevelServiceContext must not throw checked exceptions because generated descriptors instantiate services directly",
+                    typeElement
+            );
+            return null;
+        }
+        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LEVEL_SERVICE_ANNOTATION);
+        if (mirror == null) {
+            return null;
+        }
+        Map<String, AnnotationValue> values = annotationSupport.annotationValues(mirror);
+        String namespace = annotationSupport.stringValue(values, "namespace");
+        String path = annotationSupport.stringValue(values, "path");
+        if (namespace == null || path == null) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiLevelService requires namespace and path values",
+                    typeElement
+            );
+            return null;
+        }
+        TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
+                processingEnv.getTypeUtils(),
+                typeElement.asType(),
+                STATEFUL_LEVEL_SERVICE_BASE,
+                0
+        );
+        if (stateTypeMirror == null) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiLevelService types must extend PiStateLevelService<S> with a concrete state type",
+                    typeElement
+            );
+            return null;
+        }
+        if (PiProcessorTypeSupport.isParameterizedDeclaredType(stateTypeMirror)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PiLevelService types must resolve to a non-parameterized concrete state type",
+                    typeElement
+            );
+            return null;
+        }
+        Element stateElement = processingEnv.getTypeUtils().asElement(stateTypeMirror);
+        String stateQualifiedName = stateTypeMirror.toString();
+        String stateSimpleName = stateElement instanceof TypeElement stateTypeElement
+                ? stateTypeElement.getSimpleName().toString()
+                : stateQualifiedName;
+        String serviceSimpleName = typeElement.getSimpleName().toString();
+        return new PiLevelServiceSpec(namespace, path, serviceSimpleName, stateQualifiedName, stateSimpleName);
     }
 
     private PiSchemaIdentity resolveSchemaIdentity(TypeElement typeElement) {
