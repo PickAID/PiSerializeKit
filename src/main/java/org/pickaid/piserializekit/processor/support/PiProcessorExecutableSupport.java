@@ -66,7 +66,7 @@ public final class PiProcessorExecutableSupport {
                         : MatchingConstructorStatus.ACCESSIBLE;
             }
         }
-        return hasExplicitConstructor ? MatchingConstructorStatus.MISSING : MatchingConstructorStatus.ACCESSIBLE;
+        return MatchingConstructorStatus.MISSING;
     }
 
     public static boolean declaresCheckedExceptions(ProcessingEnvironment processingEnv, ExecutableElement executable) {

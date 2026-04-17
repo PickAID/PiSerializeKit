@@ -460,6 +460,20 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             );
             return null;
         }
+        PiResolvedResourceLocation location = PiProcessorSchemaSupport.resolveExplicitResourceLocation(namespace + ":" + path);
+        if (location == null) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    PiProcessorSchemaSupport.invalidResourceLocationMessage(
+                            "@PiLevelService requires namespace and path values to form a valid namespace:path resource location",
+                            namespace + ":" + path
+                    ),
+                    typeElement
+            );
+            return null;
+        }
+        namespace = location.namespace();
+        path = location.path();
         TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
                 processingEnv.getTypeUtils(),
                 typeElement.asType(),
