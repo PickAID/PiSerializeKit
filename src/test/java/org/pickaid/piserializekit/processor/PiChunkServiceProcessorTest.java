@@ -13,7 +13,200 @@ import org.junit.jupiter.api.Test;
 class PiChunkServiceProcessorTest {
     @Test
     void generatesChunkServiceDescriptorProviderAndCapabilityHolder() throws Exception {
-        JavaFileObject annotation = JavaFileObjects.forSourceLines(
+        JavaFileObject state = counterStateType();
+        JavaFileObject service = JavaFileObjects.forSourceLines(
+                "example.CounterChunkService",
+                "package example;",
+                "import org.pickaid.pibrary.api.service.PiChunkService;",
+                "import org.pickaid.pibrary.api.service.PiChunkServiceContext;",
+                "import org.pickaid.pibrary.api.service.PiStateChunkService;",
+                "@PiChunkService(namespace = \"example\", path = \"counter_chunk\")",
+                "public final class CounterChunkService extends PiStateChunkService<CounterState> {",
+                "  public CounterChunkService(PiChunkServiceContext context) {",
+                "    super(context);",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = compileChunkService(statefulChunkServiceBase(), state, service);
+
+        assertThat(compilation).succeeded();
+        assertThat(compilation).generatedSourceFile("example.CounterChunkService_PiChunkDescriptor");
+        assertThat(compilation).generatedSourceFile("example.CounterChunkService_PiChunkProvider");
+        assertGeneratedContains(
+                compilation,
+                "example.CounterChunkService_PiChunkDescriptor",
+                "extends PiGeneratedChunkServiceDescriptor<CounterChunkService, CounterState>"
+        );
+        assertGeneratedContains(
+                compilation,
+                "example.CounterChunkService_PiChunkDescriptor",
+                "super(ResourceLocation.fromNamespaceAndPath(\"example\", \"counter_chunk\"), CounterChunkService.class, CounterState.class);"
+        );
+        assertGeneratedContains(
+                compilation,
+                "example.CounterChunkService_PiChunkDescriptor",
+                "private static final class CapabilityHolder"
+        );
+        assertGeneratedContains(
+                compilation,
+                "example.CounterChunkService_PiChunkDescriptor",
+                "Capability<CounterChunkService>"
+        );
+        assertGeneratedContains(
+                compilation,
+                "example.CounterChunkService_PiChunkDescriptor",
+                "return new CounterChunkService(context);"
+        );
+        assertGeneratedContains(
+                compilation,
+                "example.CounterChunkService_PiChunkProvider",
+                "implements PiChunkServiceProvider"
+        );
+        assertGeneratedContains(
+                compilation,
+                "example.CounterChunkService_PiChunkProvider",
+                "registry.register(new CounterChunkService_PiChunkDescriptor());"
+        );
+        assertGeneratedResourceContains(
+                compilation,
+                "META-INF/services/org.pickaid.pibrary.runtime.chunk.PiChunkServiceProvider",
+                "example.CounterChunkService_PiChunkProvider"
+        );
+    }
+
+    @Test
+    void rejectsChunkServiceWithoutAccessibleContextConstructor() {
+        JavaFileObject base = JavaFileObjects.forSourceLines(
+                "org.pickaid.pibrary.api.service.PiStateChunkService",
+                "package org.pickaid.pibrary.api.service;",
+                "public abstract class PiStateChunkService<S> {",
+                "  protected PiStateChunkService() {",
+                "  }",
+                "}"
+        );
+        JavaFileObject state = counterStateType();
+        JavaFileObject service = JavaFileObjects.forSourceLines(
+                "example.MissingConstructorChunkService",
+                "package example;",
+                "import org.pickaid.pibrary.api.service.PiChunkService;",
+                "import org.pickaid.pibrary.api.service.PiStateChunkService;",
+                "@PiChunkService(namespace = \"example\", path = \"missing_constructor\")",
+                "public final class MissingConstructorChunkService extends PiStateChunkService<CounterState> {",
+                "}"
+        );
+
+        Compilation compilation = compileChunkService(base, state, service);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining(
+                "@PiChunkService types must declare an accessible constructor accepting PiChunkServiceContext"
+        );
+    }
+
+    @Test
+    void rejectsChunkServiceConstructorThatThrowsCheckedException() {
+        JavaFileObject state = counterStateType();
+        JavaFileObject service = JavaFileObjects.forSourceLines(
+                "example.CheckedExceptionChunkService",
+                "package example;",
+                "import java.io.IOException;",
+                "import org.pickaid.pibrary.api.service.PiChunkService;",
+                "import org.pickaid.pibrary.api.service.PiChunkServiceContext;",
+                "import org.pickaid.pibrary.api.service.PiStateChunkService;",
+                "@PiChunkService(namespace = \"example\", path = \"checked_exception\")",
+                "public final class CheckedExceptionChunkService extends PiStateChunkService<CounterState> {",
+                "  public CheckedExceptionChunkService(PiChunkServiceContext context) throws IOException {",
+                "    super(context);",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = compileChunkService(statefulChunkServiceBase(), state, service);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining(
+                "@PiChunkService constructors accepting PiChunkServiceContext must not throw checked exceptions because generated descriptors instantiate services directly"
+        );
+    }
+
+    @Test
+    void rejectsChunkServiceWithInvalidNamespaceOrPath() {
+        JavaFileObject state = counterStateType();
+        JavaFileObject service = JavaFileObjects.forSourceLines(
+                "example.InvalidLocationChunkService",
+                "package example;",
+                "import org.pickaid.pibrary.api.service.PiChunkService;",
+                "import org.pickaid.pibrary.api.service.PiChunkServiceContext;",
+                "import org.pickaid.pibrary.api.service.PiStateChunkService;",
+                "@PiChunkService(namespace = \"bad namespace\", path = \"counter chunk\")",
+                "public final class InvalidLocationChunkService extends PiStateChunkService<CounterState> {",
+                "  public InvalidLocationChunkService(PiChunkServiceContext context) {",
+                "    super(context);",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = compileChunkService(statefulChunkServiceBase(), state, service);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining(
+                "@PiChunkService requires namespace and path values to form a valid namespace:path resource location"
+        );
+    }
+
+    @Test
+    void rejectsChunkServiceWithParameterizedInferredStateType() {
+        JavaFileObject state = JavaFileObjects.forSourceLines(
+                "example.ExampleState",
+                "package example;",
+                "public final class ExampleState<T> {",
+                "}"
+        );
+        JavaFileObject service = JavaFileObjects.forSourceLines(
+                "example.ParameterizedChunkService",
+                "package example;",
+                "import org.pickaid.pibrary.api.service.PiChunkService;",
+                "import org.pickaid.pibrary.api.service.PiChunkServiceContext;",
+                "import org.pickaid.pibrary.api.service.PiStateChunkService;",
+                "@PiChunkService(namespace = \"example\", path = \"parameterized_state\")",
+                "public final class ParameterizedChunkService extends PiStateChunkService<ExampleState<String>> {",
+                "  public ParameterizedChunkService(PiChunkServiceContext context) {",
+                "    super(context);",
+                "  }",
+                "}"
+        );
+
+        Compilation compilation = compileChunkService(statefulChunkServiceBase(), state, service);
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining(
+                "@PiChunkService types must resolve to a non-parameterized concrete state type"
+        );
+    }
+
+    private static Compilation compileChunkService(JavaFileObject base, JavaFileObject state, JavaFileObject service) {
+        return javac()
+                .withProcessors(new PiSyncModelProcessor())
+                .compile(
+                        chunkServiceAnnotation(),
+                        chunkServiceContext(),
+                        chunkServiceDescriptor(),
+                        generatedChunkServiceDescriptor(),
+                        chunkServiceRegistry(),
+                        chunkServiceProvider(),
+                        base,
+                        resourceLocationType(),
+                        capabilityType(),
+                        capabilityTokenType(),
+                        capabilityManagerType(),
+                        state,
+                        service
+                );
+    }
+
+    private static JavaFileObject chunkServiceAnnotation() {
+        return JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.api.service.PiChunkService",
                 "package org.pickaid.pibrary.api.service;",
                 "import java.lang.annotation.ElementType;",
@@ -27,13 +220,19 @@ class PiChunkServiceProcessorTest {
                 "  String path();",
                 "}"
         );
-        JavaFileObject context = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject chunkServiceContext() {
+        return JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.api.service.PiChunkServiceContext",
                 "package org.pickaid.pibrary.api.service;",
                 "public final class PiChunkServiceContext {",
                 "}"
         );
-        JavaFileObject descriptor = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject chunkServiceDescriptor() {
+        return JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.api.service.PiChunkServiceDescriptor",
                 "package org.pickaid.pibrary.api.service;",
                 "import net.minecraft.resources.ResourceLocation;",
@@ -46,7 +245,10 @@ class PiChunkServiceProcessorTest {
                 "  T create(PiChunkServiceContext context);",
                 "}"
         );
-        JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject generatedChunkServiceDescriptor() {
+        return JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.runtime.chunk.PiGeneratedChunkServiceDescriptor",
                 "package org.pickaid.pibrary.runtime.chunk;",
                 "import net.minecraft.resources.ResourceLocation;",
@@ -78,21 +280,30 @@ class PiChunkServiceProcessorTest {
                 "  public abstract T create(PiChunkServiceContext context);",
                 "}"
         );
-        JavaFileObject registry = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject chunkServiceRegistry() {
+        return JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.runtime.chunk.PiChunkServiceRegistry",
                 "package org.pickaid.pibrary.runtime.chunk;",
                 "public interface PiChunkServiceRegistry {",
                 "  void register(PiGeneratedChunkServiceDescriptor<?, ?> descriptor);",
                 "}"
         );
-        JavaFileObject provider = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject chunkServiceProvider() {
+        return JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.runtime.chunk.PiChunkServiceProvider",
                 "package org.pickaid.pibrary.runtime.chunk;",
                 "public interface PiChunkServiceProvider {",
                 "  void register(PiChunkServiceRegistry registry);",
                 "}"
         );
-        JavaFileObject base = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject statefulChunkServiceBase() {
+        return JavaFileObjects.forSourceLines(
                 "org.pickaid.pibrary.api.service.PiStateChunkService",
                 "package org.pickaid.pibrary.api.service;",
                 "public abstract class PiStateChunkService<S> {",
@@ -100,7 +311,10 @@ class PiChunkServiceProcessorTest {
                 "  }",
                 "}"
         );
-        JavaFileObject resourceLocation = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject resourceLocationType() {
+        return JavaFileObjects.forSourceLines(
                 "net.minecraft.resources.ResourceLocation",
                 "package net.minecraft.resources;",
                 "public record ResourceLocation(String namespace, String path) {",
@@ -109,19 +323,28 @@ class PiChunkServiceProcessorTest {
                 "  }",
                 "}"
         );
-        JavaFileObject capability = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject capabilityType() {
+        return JavaFileObjects.forSourceLines(
                 "net.minecraftforge.common.capabilities.Capability",
                 "package net.minecraftforge.common.capabilities;",
                 "public interface Capability<T> {",
                 "}"
         );
-        JavaFileObject capabilityToken = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject capabilityTokenType() {
+        return JavaFileObjects.forSourceLines(
                 "net.minecraftforge.common.capabilities.CapabilityToken",
                 "package net.minecraftforge.common.capabilities;",
                 "public abstract class CapabilityToken<T> {",
                 "}"
         );
-        JavaFileObject capabilityManager = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject capabilityManagerType() {
+        return JavaFileObjects.forSourceLines(
                 "net.minecraftforge.common.capabilities.CapabilityManager",
                 "package net.minecraftforge.common.capabilities;",
                 "public final class CapabilityManager {",
@@ -132,81 +355,14 @@ class PiChunkServiceProcessorTest {
                 "  }",
                 "}"
         );
-        JavaFileObject state = JavaFileObjects.forSourceLines(
+    }
+
+    private static JavaFileObject counterStateType() {
+        return JavaFileObjects.forSourceLines(
                 "example.CounterState",
                 "package example;",
                 "public final class CounterState {",
                 "}"
-        );
-        JavaFileObject service = JavaFileObjects.forSourceLines(
-                "example.CounterChunkService",
-                "package example;",
-                "import org.pickaid.pibrary.api.service.PiChunkService;",
-                "import org.pickaid.pibrary.api.service.PiChunkServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateChunkService;",
-                "@PiChunkService(namespace = \"example\", path = \"counter_chunk\")",
-                "public final class CounterChunkService extends PiStateChunkService<CounterState> {",
-                "  public CounterChunkService(PiChunkServiceContext context) {",
-                "    super(context);",
-                "  }",
-                "}"
-        );
-
-        Compilation compilation = javac()
-                .withProcessors(new PiSyncModelProcessor())
-                .compile(
-                        annotation,
-                        context,
-                        descriptor,
-                        generatedDescriptor,
-                        registry,
-                        provider,
-                        base,
-                        resourceLocation,
-                        capability,
-                        capabilityToken,
-                        capabilityManager,
-                        state,
-                        service
-                );
-
-        assertThat(compilation).succeeded();
-        assertThat(compilation).generatedSourceFile("example.CounterChunkService_PiChunkDescriptor");
-        assertThat(compilation).generatedSourceFile("example.CounterChunkService_PiChunkProvider");
-        assertGeneratedContains(
-                compilation,
-                "example.CounterChunkService_PiChunkDescriptor",
-                "extends PiGeneratedChunkServiceDescriptor<CounterChunkService, CounterState>"
-        );
-        assertGeneratedContains(
-                compilation,
-                "example.CounterChunkService_PiChunkDescriptor",
-                "private static final class CapabilityHolder"
-        );
-        assertGeneratedContains(
-                compilation,
-                "example.CounterChunkService_PiChunkDescriptor",
-                "Capability<CounterChunkService>"
-        );
-        assertGeneratedContains(
-                compilation,
-                "example.CounterChunkService_PiChunkDescriptor",
-                "return new CounterChunkService(context);"
-        );
-        assertGeneratedContains(
-                compilation,
-                "example.CounterChunkService_PiChunkProvider",
-                "implements PiChunkServiceProvider"
-        );
-        assertGeneratedContains(
-                compilation,
-                "example.CounterChunkService_PiChunkProvider",
-                "registry.register(new CounterChunkService_PiChunkDescriptor());"
-        );
-        assertGeneratedResourceContains(
-                compilation,
-                "META-INF/services/org.pickaid.pibrary.runtime.chunk.PiChunkServiceProvider",
-                "example.CounterChunkService_PiChunkProvider"
         );
     }
 
