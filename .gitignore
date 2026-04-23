@@ -23,6 +23,7 @@ run
 logs
 .worktrees
 docs/superpowers
+project.local.toml
 
 # Files from Forge MDK
 forge*changelog.txt

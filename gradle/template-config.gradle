@@ -1,0 +1,467 @@
+import groovy.util.ConfigObject
+
+def failConfig = { String message ->
+    throw new GradleException("[template-config] ${message}")
+}
+
+def projectFile = file("${rootDir}/project.toml")
+def legacyTemplateFile = file("${rootDir}/template.toml")
+def legacyBuildTxt = file("${rootDir}/build.txt")
+def defaultsFile = file("${rootDir}/gradle/template-defaults.toml")
+
+if (legacyTemplateFile.exists()) {
+    failConfig("template.toml is no longer supported; migrate to project.toml")
+}
+if (!projectFile.isFile()) {
+    failConfig("project.toml is required")
+}
+if (legacyBuildTxt.exists()) {
+    failConfig("build.txt is no longer supported; migrate to project.toml")
+}
+if (!defaultsFile.isFile()) {
+    failConfig("gradle/template-defaults.toml is required")
+}
+
+def parseToml = { File source ->
+    def classpathUrls = project.buildscript.configurations.classpath.files.collect { it.toURI().toURL() } as URL[]
+    def tomljLoader = new URLClassLoader(classpathUrls, this.class.classLoader)
+    def tomlClass = Class.forName("org.tomlj.Toml", true, tomljLoader)
+    def parsed = tomlClass.parse(source.toPath())
+    if (parsed.hasErrors()) {
+        def rendered = parsed.errors().collect { it.toString() }.join(System.lineSeparator())
+        failConfig("Failed to parse ${source.name}:${System.lineSeparator()}${rendered}")
+    }
+    parsed
+}
+
+def expectLong = { def parsed, String key ->
+    def value = parsed.getLong(key)
+    if (value == null) {
+        failConfig("Missing required integer key: ${key}")
+    }
+    value
+}
+
+def expectTable = { def parsed, String key ->
+    def table = parsed.getTable(key)
+    if (table == null) {
+        failConfig("Missing required table: ${key}")
+    }
+    table
+}
+
+def expectStringFromTable = { def table, String key, String path ->
+    def value = table.getString(key)
+    if (value == null) {
+        failConfig("Missing required string key: ${path}.${key}")
+    }
+    value
+}
+
+def expectStringFromParsed = { def parsed, String key ->
+    def value = parsed.getString(key)
+    if (value == null) {
+        failConfig("Missing required string key: ${key}")
+    }
+    value
+}
+
+def optionalStringFromTable = { def table, String key, String defaultValue = "" ->
+    def value = table == null ? null : table.getString(key)
+    value != null ? value : defaultValue
+}
+
+def optionalLongFromTable = { def table, String key, long defaultValue = 0L ->
+    def value = table == null ? null : table.getLong(key)
+    value != null ? value : defaultValue
+}
+
+def optionalBooleanFromTable = { def table, String key, boolean defaultValue = false ->
+    def value = table == null ? null : table.getBoolean(key)
+    value != null ? value : defaultValue
+}
+
+def expectStringArray = { def table, String key, String path ->
+    def array = table.getArray(key)
+    if (array == null) {
+        failConfig("Missing required array key: ${path}.${key}")
+    }
+
+    def values = (0..<array.size()).collect { int index ->
+        def value = array.getString(index)
+        if (value == null) {
+            failConfig("Expected string array entries in ${path}.${key}")
+        }
+        value
+    }
+
+    if (values.isEmpty()) {
+        failConfig("${path}.${key} must not be empty")
+    }
+
+    values
+}
+
+def templateParsed = parseToml(projectFile)
+def defaultsParsed = parseToml(defaultsFile)
+
+ext.templateRaw = templateParsed
+ext.templateDefaultsRaw = defaultsParsed
+
+def schemaVersion = expectLong(templateParsed, "schema_version")
+if (schemaVersion != 1L) {
+    failConfig("Unsupported schema_version: ${schemaVersion}")
+}
+
+def templateVersion = expectStringFromParsed(templateParsed, "template_version")
+def defaultsRevision = expectStringFromParsed(defaultsParsed, "defaults_revision")
+def modTable = expectTable(templateParsed, "mod")
+def featuresTable = expectTable(templateParsed, "features")
+def repositoriesTable = templateParsed.getTable("repositories")
+def dependenciesTable = templateParsed.getTable("dependencies")
+def publishTable = expectTable(templateParsed, "publish")
+def namingTable = expectTable(templateParsed, "naming")
+def overridesTable = templateParsed.getTable("overrides")
+def platformTable = expectTable(defaultsParsed, "platform")
+def versionsTable = expectTable(defaultsParsed, "versions")
+
+// project.toml is intentionally small at the top level so authors can see the
+// supported surface at a glance and configuration errors stay fail-fast.
+def allowedTopLevel = ["schema_version", "template_version", "mod", "features", "repositories", "dependencies", "overrides", "publish", "naming"] as Set
+def allowedFeatures = ["jei", "curios", "geckolib", "player_animator", "mixin_extras"] as Set
+def allowedOverrideToFeature = [
+    "jei_version"             : "jei",
+    "curios_version"          : "curios",
+    "geckolib_version"        : "geckolib",
+    "player_animator_version" : "player_animator",
+    "bendylib_version"        : "player_animator",
+    "mixin_extras_version"    : "mixin_extras"
+] as Map<String, String>
+def allowedJarTokens = ["archive_name", "mod_id", "version", "mc_version", "loader"] as Set
+def allowedDependencyBuckets = [
+    implementation         : [configuration: "implementation", deobf: false, supportsRange: false],
+    compile_only           : [configuration: "compileOnly", deobf: false, supportsRange: false],
+    runtime_only           : [configuration: "runtimeOnly", deobf: false, supportsRange: false],
+    annotation_processor   : [configuration: "annotationProcessor", deobf: false, supportsRange: false],
+    test_implementation    : [configuration: "testImplementation", deobf: false, supportsRange: false],
+    test_runtime_only      : [configuration: "testRuntimeOnly", deobf: false, supportsRange: false],
+    deobf_implementation   : [configuration: "implementation", deobf: true, supportsRange: false],
+    deobf_compile_only     : [configuration: "compileOnly", deobf: true, supportsRange: false],
+    deobf_runtime_only     : [configuration: "runtimeOnly", deobf: true, supportsRange: false],
+    deobf_test_implementation: [configuration: "testImplementation", deobf: true, supportsRange: false],
+    deobf_test_runtime_only: [configuration: "testRuntimeOnly", deobf: true, supportsRange: false],
+    jarjar                 : [configuration: "jarJar", deobf: false, supportsRange: true]
+] as Map<String, Map<String, Object>>
+
+templateParsed.dottedKeySet().collect { it.split("\\.")[0] }.unique().each { key ->
+    if (!allowedTopLevel.contains(key)) {
+        failConfig("Unknown top-level key: ${key}")
+    }
+}
+
+featuresTable.keySet().each { key ->
+    if (!allowedFeatures.contains(key)) {
+        failConfig("Unknown feature key: ${key}")
+    }
+}
+
+if (overridesTable != null) {
+    overridesTable.keySet().each { key ->
+        def owningFeature = allowedOverrideToFeature[key]
+        if (owningFeature == null) {
+            failConfig("Unknown override key: ${key}")
+        }
+        if (!(featuresTable.getBoolean(owningFeature) ?: false)) {
+            failConfig("Override ${key} requires enabled feature ${owningFeature}")
+        }
+    }
+}
+
+def customRepositories = [:]
+if (repositoriesTable != null) {
+    repositoriesTable.keySet().each { key ->
+        if (!repositoriesTable.isString(key)) {
+            failConfig("Repository ${key} must be a string URL")
+        }
+        def url = repositoriesTable.getString(key)
+        if (url == null || url.isBlank()) {
+            failConfig("Repository ${key} must be a non-empty string URL")
+        }
+        customRepositories[key] = url
+    }
+}
+
+def parseNotation = { String notation, String path ->
+    def parts = notation.split(":", 3)
+    if (parts.length != 3 || parts.any { it.isBlank() }) {
+        failConfig("Dependency ${path} must use group:artifact:version notation")
+    }
+    [
+        group   : parts[0],
+        artifact: parts[1],
+        version : parts[2]
+    ]
+}
+
+// Generic dependency tables let projects opt into extra libraries without the
+// template growing one more hard-coded feature switch for every ecosystem mod.
+def templateDependencySpecs = []
+if (dependenciesTable != null) {
+    dependenciesTable.keySet().each { bucketKey ->
+        def bucketSpec = allowedDependencyBuckets[bucketKey]
+        if (bucketSpec == null) {
+            failConfig("Unknown dependency bucket: ${bucketKey}")
+        }
+
+        def bucketTable = dependenciesTable.getTable(bucketKey)
+        if (bucketTable == null) {
+            failConfig("Dependency bucket ${bucketKey} must be a TOML table")
+        }
+
+        bucketTable.keySet().each { dependencyKey ->
+            def entryPath = "${bucketKey}.${dependencyKey}"
+            def supportsRange = bucketSpec.supportsRange as boolean
+            def notation
+            def transitive = true
+            def range = ""
+            def inlineTable = null
+
+            if (bucketTable.isString(dependencyKey)) {
+                notation = bucketTable.getString(dependencyKey)
+            } else if (bucketTable.isTable(dependencyKey)) {
+                inlineTable = bucketTable.getTable(dependencyKey)
+
+                if (inlineTable.contains("notation") && !inlineTable.isString("notation")) {
+                    failConfig("Dependency ${entryPath}.notation must be a string")
+                }
+                if (inlineTable.contains("range") && !inlineTable.isString("range")) {
+                    failConfig("Dependency ${entryPath}.range must be a string")
+                }
+                if (inlineTable.contains("transitive") && !inlineTable.isBoolean("transitive")) {
+                    failConfig("Dependency ${entryPath}.transitive must be a boolean")
+                }
+
+                notation = inlineTable.getString("notation")
+                transitive = optionalBooleanFromTable(inlineTable, "transitive", true)
+                range = optionalStringFromTable(inlineTable, "range")
+            } else {
+                failConfig("Dependency ${entryPath} must be a string or inline table")
+            }
+
+            if (notation == null || notation.isBlank()) {
+                failConfig("Dependency ${entryPath} must define notation")
+            }
+
+            if (inlineTable != null) {
+                def allowedEntryKeys = (supportsRange ? ["notation", "range", "transitive"] : ["notation", "transitive"]) as Set
+                inlineTable.keySet().each { key ->
+                    if (!allowedEntryKeys.contains(key)) {
+                        failConfig("Dependency ${entryPath} has unsupported key ${key}")
+                    }
+                }
+            } else if (supportsRange) {
+                failConfig("Dependency ${entryPath} must be an inline table with notation and range")
+            }
+
+            if (supportsRange && range.isBlank()) {
+                failConfig("Dependency ${entryPath} must define range")
+            }
+            if (!supportsRange && !range.isBlank()) {
+                failConfig("Dependency ${entryPath} does not support range")
+            }
+
+            def notationParts = parseNotation(notation, entryPath)
+            templateDependencySpecs << [
+                name        : dependencyKey,
+                bucket      : bucketKey,
+                configuration: bucketSpec.configuration,
+                deobf       : bucketSpec.deobf,
+                notation    : notation,
+                transitive  : transitive,
+                range       : range,
+                group       : notationParts.group,
+                artifact    : notationParts.artifact,
+                version     : notationParts.version
+            ]
+        }
+    }
+}
+
+ext.templateTables = [
+    mod      : modTable,
+    features : featuresTable,
+    repositories: repositoriesTable,
+    dependencies: dependenciesTable,
+    publish  : publishTable,
+    naming   : namingTable,
+    overrides: overridesTable
+]
+
+ext.templateRepositories = [
+    custom: customRepositories
+]
+ext.templateDependencies = templateDependencySpecs
+
+def modId = expectStringFromTable(modTable, "mod_id", "mod")
+def modName = expectStringFromTable(modTable, "mod_name", "mod")
+def baseVersion = expectStringFromTable(modTable, "version", "mod")
+def versionSuffix = optionalStringFromTable(modTable, "version_suffix")
+def finalVersion = versionSuffix.isBlank() ? baseVersion : "${baseVersion}-${versionSuffix}"
+def archiveName = expectStringFromTable(namingTable, "archive_name", "naming")
+def authors = expectStringArray(modTable, "authors", "mod")
+def releaseType = publishTable.getString("release_type")
+def allowedReleaseTypes = ["alpha", "beta", "release"] as Set
+if (!allowedReleaseTypes.contains(releaseType)) {
+    failConfig("Unsupported release_type: ${releaseType}")
+}
+
+def mcVersion = expectStringFromTable(platformTable, "mc_version", "platform")
+def mcRange = expectStringFromTable(platformTable, "mc_range", "platform")
+def forgeVersion = expectStringFromTable(platformTable, "forge_version", "platform")
+def forgeRange = expectStringFromTable(platformTable, "forge_range", "platform")
+def javaVersion = expectStringFromTable(platformTable, "java", "platform")
+
+def renderJarFormat = { String format, Map<String, String> tokens ->
+    def matcher = (format =~ /\{([^}]+)\}/)
+    matcher.each { match ->
+        def token = match[1]
+        if (!allowedJarTokens.contains(token)) {
+            failConfig("Unsupported jar_format token: ${token}")
+        }
+    }
+
+    def rendered = format
+    tokens.each { token, value ->
+        rendered = rendered.replace("{${token}}", value)
+    }
+
+    if (rendered.isBlank()) {
+        failConfig("Rendered jar_format must not be blank")
+    }
+    if (rendered =~ /[\/\\\\:]/) {
+        failConfig("Rendered jar_format contains illegal path characters: ${rendered}")
+    }
+
+    rendered
+}
+
+def renderedArchiveStem = renderJarFormat(
+    namingTable.getString("jar_format") ?: "{archive_name}-{mc_version}-{version}",
+    [
+        archive_name: archiveName,
+        mod_id      : modId,
+        version     : finalVersion,
+        mc_version  : mcVersion,
+        loader      : "forge"
+    ]
+)
+
+def resolveVersion = { String overrideKey, String defaultsKey ->
+    def overrideValue = overridesTable?.getString(overrideKey)
+    overrideValue != null ? overrideValue : expectStringFromTable(versionsTable, defaultsKey, "versions")
+}
+
+ext.enabledFeatures = allowedFeatures.collectEntries { key ->
+    [(key): (featuresTable.getBoolean(key) ?: false)]
+}
+
+ext.template = [
+    schemaVersion  : schemaVersion,
+    templateVersion: templateVersion,
+    defaultsRevision: defaultsRevision,
+    modId          : modId,
+    modName        : modName,
+    version        : baseVersion,
+    versionSuffix  : versionSuffix,
+    finalVersion   : finalVersion,
+    group          : expectStringFromTable(modTable, "group", "mod"),
+    authors        : authors,
+    license        : expectStringFromTable(modTable, "license", "mod"),
+    description    : expectStringFromTable(modTable, "description", "mod"),
+    credits        : optionalStringFromTable(modTable, "credits", "None"),
+    issueTracker   : optionalStringFromTable(modTable, "issue_tracker_url"),
+    archiveName    : archiveName,
+    renderedArchiveStem: renderedArchiveStem,
+    releaseType    : releaseType,
+    mavenUrl       : optionalStringFromTable(publishTable, "maven_url"),
+    mavenUser      : optionalStringFromTable(publishTable, "maven_user"),
+    mavenPassword  : optionalStringFromTable(publishTable, "maven_password"),
+    modrinthToken  : optionalStringFromTable(publishTable, "modrinth_token"),
+    curseforgeToken: optionalStringFromTable(publishTable, "curseforge_token"),
+    curseforgeProject: optionalLongFromTable(publishTable, "curseforge_project", 0L),
+    modrinthProject: optionalStringFromTable(publishTable, "modrinth_project")
+]
+
+ext.templatePlatform = [
+    mcVersion         : mcVersion,
+    mcVersionRange    : mcRange,
+    forgeVersion      : forgeVersion,
+    forgeVersionRange : forgeRange,
+    forgeVersionWithMc: "${mcVersion}-${forgeVersion}",
+    javaVersion       : javaVersion,
+    loader            : "forge"
+]
+
+ext.resolvedFeatureVersions = [
+    registrate               : expectStringFromTable(versionsTable, "registrate", "versions"),
+    jei                      : resolveVersion("jei_version", "jei"),
+    curios                   : resolveVersion("curios_version", "curios"),
+    geckolib                 : resolveVersion("geckolib_version", "geckolib"),
+    playerAnimator           : resolveVersion("player_animator_version", "player_animator"),
+    bendylib                 : resolveVersion("bendylib_version", "bendylib"),
+    mixinExtras              : resolveVersion("mixin_extras_version", "mixin_extras"),
+    jeiVersionRange          : resolveVersion("jei_version", "jei"),
+    curiosVersionRange       : resolveVersion("curios_version", "curios"),
+    geckolibVersionRange     : resolveVersion("geckolib_version", "geckolib"),
+    playerAnimatorVersionRange: resolveVersion("player_animator_version", "player_animator")
+]
+
+def compatConfig = new ConfigObject()
+compatConfig.putAll([
+    enable_annotation   : "true",
+    mod_version         : finalVersion,
+    formal_version      : "false",
+    registrate_version  : resolvedFeatureVersions.registrate,
+    jei_version         : resolvedFeatureVersions.jei,
+    curios_version      : resolvedFeatureVersions.curios,
+    geckolib_version    : resolvedFeatureVersions.geckolib,
+    playeranimator_version: resolvedFeatureVersions.playerAnimator,
+    bendylib_version    : resolvedFeatureVersions.bendylib,
+    mixin_extras_version: resolvedFeatureVersions.mixinExtras,
+    rpg_projects        : "",
+    reference_projects  : "",
+    mod_id              : modId,
+    archive_name        : archiveName,
+    mod_name            : modName,
+    mod_description     : template.description,
+    mod_authors         : authors.join(", "),
+    mod_license         : template.license,
+    mod_credits         : template.credits,
+    issue_tracker_url   : template.issueTracker,
+    maven_group         : template.group,
+    rendered_archive_stem: renderedArchiveStem,
+    maven_url           : template.mavenUrl,
+    maven_user          : template.mavenUser,
+    maven_passwd        : template.mavenPassword,
+    mc_version          : mcVersion,
+    mc_range            : mcRange,
+    forge_version       : forgeVersion,
+    forge_range         : forgeRange,
+    mc_user             : "",
+    java                : javaVersion,
+    cf_project          : template.curseforgeProject.toString(),
+    modrinth_project    : template.modrinthProject,
+    modrinth_token      : template.modrinthToken,
+    curseforge_token    : template.curseforgeToken,
+    release_type        : template.releaseType,
+    required_mods       : "",
+    optional_mods       : "",
+    incompatible_mods   : "",
+    embedded_mods       : ""
+])
+
+project.ext.configFile = projectFile
+project.ext.config = compatConfig
+project.ext.hasConfig = { String key ->
+    config.isSet(key)
+}

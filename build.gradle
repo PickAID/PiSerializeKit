@@ -11,6 +11,7 @@ buildscript {
     dependencies {
         classpath "gradle.plugin.com.matthewprenger:CurseGradle:1.4.+"
         classpath 'org.spongepowered:mixingradle:0.7.+'
+        classpath "org.tomlj:tomlj:1.1.1"
     }
 }
 
@@ -25,6 +26,11 @@ apply plugin: 'idea'
 apply plugin: 'maven-publish'
 apply plugin: "com.matthewprenger.cursegradle"
 apply plugin: 'org.spongepowered.mixin'
+apply from: 'gradle/template-config.gradle'
+
+def enabledFeatures = project.ext.enabledFeatures
+def templateRepositories = project.ext.templateRepositories
+def templateDependencies = project.ext.templateDependencies
 
 jarJar.enable()
 
@@ -40,16 +46,6 @@ tasks.jar.configure {
 
 tasks.matching { it.name == "reobfJar" }.configureEach {
     enabled = false
-}
-
-ext.configFile = file("build.txt")
-configFile.withReader {
-    def prop = new Properties()
-    prop.load(it)
-    project.ext.config = new ConfigSlurper().parse(prop)
-    project.ext.hasConfig = { key ->
-        return config.isSet(key);
-    }
 }
 
 version = config.mod_version
@@ -223,11 +219,18 @@ repositories {
         url 'https://jitpack.io'
         content {
             includeGroup "com.github.rtyley"
+            includeGroup "com.github.llamalad7.mixinextras"
         }
     }
     maven {
         name = "Mihono's maven"
         url = "https://maven.mihono.cn/repository/pickaid1201/"
+    }
+    templateRepositories.custom.each { repoName, repoUrl ->
+        maven {
+            name = "project-${repoName}"
+            url = repoUrl
+        }
     }
     flatDir { dirs "libraries/${config.mc_version}/all" }
     flatDir { dirs "libraries/${config.mc_version}/classpathOnly" }
@@ -235,9 +238,17 @@ repositories {
     flatDir { dirs "libraries/embedded" }
 }
 
+def createConfiguredDependency = { String notation, boolean transitive ->
+    project.dependencies.create(notation) {
+        it.transitive = transitive
+    }
+}
+
 dependencies {
     minecraft "net.minecraftforge:forge:${config.mc_version}-${config.forge_version}"
-    compileOnly(annotationProcessor("com.github.llamalad7.mixinextras:mixinextras-common:${config.mixin_extras_version}"))
+    if (enabledFeatures.mixin_extras) {
+        compileOnly(annotationProcessor("com.github.llamalad7.mixinextras:mixinextras-common:${config.mixin_extras_version}"))
+    }
     testAnnotationProcessor sourceSets.main.output
     testImplementation platform("org.junit:junit-bom:5.10.2")
     testImplementation "org.junit.jupiter:junit-jupiter"
@@ -247,24 +258,24 @@ dependencies {
     compileOnly fg.deobf("com.tterrag.registrate:Registrate:${config.registrate_version}")
     jarJar(group: 'com.tterrag.registrate', name: 'Registrate', version: "[MC1.20,MC1.21)")
 
-    if (hasConfig("jei_version") && !config.jei_version.isEmpty()) {
+    if (enabledFeatures.jei) {
         compileOnly fg.deobf("mezz.jei:jei-${config.mc_version}-common-api:${config.jei_version}")
         compileOnly fg.deobf("mezz.jei:jei-${config.mc_version}-forge-api:${config.jei_version}")
         runtimeOnly fg.deobf("mezz.jei:jei-${config.mc_version}-forge:${config.jei_version}")
     }
 
-    if (hasConfig("geckolib_version") && !config.geckolib_version.isEmpty()) {
+    if (enabledFeatures.geckolib) {
         implementation fg.deobf("software.bernie.geckolib:geckolib-neoforge-${config.mc_version}:${config.geckolib_version}")
         implementation("com.eliotlash.mclib:mclib:20")
         jarJar(group: 'software.bernie.geckolib', name: "geckolib-neoforge-${config.mc_version}", version: "[${config.geckolib_version},)")
     }
 
-    if (hasConfig("curios_version") && !config.curios_version.isEmpty()) {
+    if (enabledFeatures.curios) {
         compileOnly fg.deobf("top.theillusivec4.curios:curios-forge:${config.curios_version}")
 //        runtimeOnly fg.deobf("top.theillusivec4.curios:curios-forge:${config.curios_version}")
     }
 
-    if (hasConfig("playeranimator_version") && !config.playeranimator_version.isEmpty()) {
+    if (enabledFeatures.player_animator) {
         implementation fg.deobf("dev.kosmx.player-anim:player-animation-lib-forge:${config.playeranimator_version}")
         runtimeOnly fg.deobf("io.github.kosmx.bendy-lib:bendy-lib-forge:${config.bendylib_version}")
     }
@@ -274,7 +285,7 @@ dependencies {
     }
 
     // Mixin extra
-    if (hasConfig("mixin_extras_version") && !config.mixin_extras_version.isEmpty()) {
+    if (enabledFeatures.mixin_extras) {
         implementation fg.deobf("com.github.llamalad7.mixinextras:mixinextras-forge:${config.mixin_extras_version}")
         jarJar(group: 'com.github.llamalad7.mixinextras', name: 'mixinextras-forge', version: "[${config.mixin_extras_version},)")
     }
@@ -320,10 +331,15 @@ dependencies {
         compileOnly fg.deobf("curse.maven:advanced-hook-launchers-244849:5829843")
     }
 
-    // KubeJS Integrations.
-    compileOnly fg.deobf("dev.latvian.mods:kubejs-forge:${config.kubejs_version}")
-    compileOnly fg.deobf("dev.latvian.mods:rhino-forge:${config.rhino_version}")
-    implementation fg.deobf("dev.architectury:architectury-forge:${config.architectury_version}")
+    templateDependencies.each { dependencySpec ->
+        def baseDependency = createConfiguredDependency(dependencySpec.notation, dependencySpec.transitive)
+        def resolvedDependency = dependencySpec.deobf ? fg.deobf(baseDependency) : baseDependency
+        add(dependencySpec.configuration, resolvedDependency)
+
+        if (dependencySpec.range) {
+            jarJar(group: dependencySpec.group, name: dependencySpec.artifact, version: dependencySpec.range)
+        }
+    }
 
     def libraries = new File(file("libraries"), "${config.mc_version}")
     if (!libraries.isDirectory()) libraries.mkdirs()
@@ -397,6 +413,9 @@ def replaceProperties = [
         forge_version    : "${config.mc_version}-${config.forge_version}", forge_version_range: config.forge_range,
         mod_id           : config.mod_id, mod_name: config.mod_name, mod_license: config.mod_license, mod_version: config.mod_version,
         mod_authors      : config.mod_authors, mod_description: config.mod_description,
+        jei_version      : config.jei_version, curios_version: config.curios_version,
+        geckolib_version : config.geckolib_version, playeranimator_version: config.playeranimator_version,
+        citadel_version  : hasConfig("citadel_version") ? config.citadel_version : "",
         modrinth_project : config.modrinth_project,
         issue_tracker_url: config.issue_tracker_url, mod_credits: config.mod_credits
 ]
@@ -486,7 +505,7 @@ artifacts {
 }
 
 modrinth {
-    token = System.env.MODRINTH_TOKEN != null ? System.env.MODRINTH_TOKEN : "NONE"
+    token = System.env.MODRINTH_TOKEN ?: config.modrinth_token ?: "NONE"
     projectId = config.modrinth_project
     versionNumber = config.mod_version
     versionType = config.release_type
@@ -549,7 +568,7 @@ modrinth {
 }
 
 curseforge {
-    apiKey = System.env.CURSEFORGE_TOKEN != null ? System.env.CURSEFORGE_TOKEN : "NONE"
+    apiKey = System.env.CURSEFORGE_TOKEN ?: config.curseforge_token ?: "NONE"
     project {
         id = config.cf_project
         changelogType = 'html'
@@ -686,8 +705,8 @@ import java.nio.file.Files
 
 def incrementBuild = {
     if (hasConfig("formal_version") && Boolean.parseBoolean(config.formal_version)) {
-        def buildTxt = configFile.toPath()
-        List<String> lines = Files.readAllLines buildTxt
+        def configPath = configFile.toPath()
+        List<String> lines = Files.readAllLines configPath
         lines.replaceAll { String ln ->
             if (ln.startsWith("mod_version")) {
                 def version = ln.split("=")[1]
@@ -696,9 +715,17 @@ def incrementBuild = {
                 def lastOne = Integer.parseInt(version.substring(dot)) + 1
                 return "mod_version=" + newVersion + lastOne
             }
+            def matcher = (ln =~ /^(\s*version\s*=\s*")([^"]+)(".*)$/)
+            if (matcher.matches()) {
+                def version = matcher[0][2]
+                def dot = version.lastIndexOf('.') + 1
+                def newVersion = version.substring(0, dot)
+                def lastOne = Integer.parseInt(version.substring(dot)) + 1
+                return matcher[0][1] + newVersion + lastOne + matcher[0][3]
+            }
             return ln
         }
-        Files.write buildTxt, lines, java.nio.file.StandardOpenOption.CREATE
+        Files.write configPath, lines, java.nio.file.StandardOpenOption.CREATE
     }
 }
 
