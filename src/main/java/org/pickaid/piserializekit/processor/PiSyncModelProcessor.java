@@ -15,10 +15,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 import org.pickaid.piserializekit.api.packet.PiPacketUpgrade;
 import org.pickaid.piserializekit.api.schema.PiAfterDecode;
@@ -29,7 +26,7 @@ import org.pickaid.piserializekit.api.schema.PiSyncModel;
 import org.pickaid.piserializekit.processor.migration.PiMigrationCollectionResult;
 import org.pickaid.piserializekit.processor.migration.PiMigrationValidationFailure;
 import org.pickaid.piserializekit.processor.model.PiAfterDecodeSpec;
-import org.pickaid.piserializekit.processor.model.PiChunkServiceSpec;
+import org.pickaid.piserializekit.processor.model.PiChunkFacetSpec;
 import org.pickaid.piserializekit.processor.model.PiFieldSpec;
 import org.pickaid.piserializekit.processor.model.PiLevelFacetSpec;
 import org.pickaid.piserializekit.processor.model.PiLivingFacetSpec;
@@ -38,8 +35,9 @@ import org.pickaid.piserializekit.processor.model.PiPacketSpec;
 import org.pickaid.piserializekit.processor.model.PiResolvedResourceLocation;
 import org.pickaid.piserializekit.processor.model.PiSchemaIdentity;
 import org.pickaid.piserializekit.processor.support.PiProcessorAnnotationSupport;
-import org.pickaid.piserializekit.processor.support.PiProcessorChunkGenerationSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorChunkFacetGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorExecutableSupport;
+import org.pickaid.piserializekit.processor.support.PiProcessorFacetAuthoringSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorFieldAuthoringSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorLevelGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorLivingGenerationSupport;
@@ -50,7 +48,6 @@ import org.pickaid.piserializekit.processor.support.PiProcessorPacketAuthoringSu
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaGenerationSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorSchemaSupport;
 import org.pickaid.piserializekit.processor.support.PiProcessorServiceFileSupport;
-import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
 
 @SupportedAnnotationTypes({
         "org.pickaid.piserializekit.api.schema.PiSyncModel",
@@ -61,7 +58,7 @@ import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
         "org.pickaid.piserializekit.api.packet.PiPacketUpgrade",
         "org.pickaid.pibrary.api.facet.PiLivingFacet",
         "org.pickaid.pibrary.api.facet.PiLevelFacet",
-        "org.pickaid.pibrary.api.service.PiChunkService"
+        "org.pickaid.pibrary.api.facet.PiChunkFacet"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 public final class PiSyncModelProcessor extends AbstractProcessor {
@@ -84,12 +81,12 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private static final String LEVEL_FACET_PROVIDER = "org.pickaid.pibrary.runtime.facet.PiLevelFacetProvider";
     private static final String LEVEL_FACET_REGISTRY = "org.pickaid.pibrary.runtime.facet.PiLevelFacetRegistry";
     private static final String STATEFUL_LEVEL_FACET_BASE = "org.pickaid.pibrary.api.facet.PiStateLevelFacet";
-    private static final String CHUNK_SERVICE_ANNOTATION = "org.pickaid.pibrary.api.service.PiChunkService";
-    private static final String CHUNK_SERVICE_CONTEXT = "org.pickaid.pibrary.api.service.PiChunkServiceContext";
-    private static final String GENERATED_CHUNK_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.runtime.chunk.PiGeneratedChunkServiceDescriptor";
-    private static final String CHUNK_SERVICE_PROVIDER = "org.pickaid.pibrary.runtime.chunk.PiChunkServiceProvider";
-    private static final String CHUNK_SERVICE_REGISTRY = "org.pickaid.pibrary.runtime.chunk.PiChunkServiceRegistry";
-    private static final String STATEFUL_CHUNK_SERVICE_BASE = "org.pickaid.pibrary.api.service.PiStateChunkService";
+    private static final String CHUNK_FACET_ANNOTATION = "org.pickaid.pibrary.api.facet.PiChunkFacet";
+    private static final String CHUNK_FACET_CONTEXT = "org.pickaid.pibrary.api.facet.PiChunkFacetContext";
+    private static final String GENERATED_CHUNK_FACET_DESCRIPTOR = "org.pickaid.pibrary.runtime.facet.PiGeneratedChunkFacetDescriptor";
+    private static final String CHUNK_FACET_PROVIDER = "org.pickaid.pibrary.runtime.facet.PiChunkFacetProvider";
+    private static final String CHUNK_FACET_REGISTRY = "org.pickaid.pibrary.runtime.facet.PiChunkFacetRegistry";
+    private static final String STATEFUL_CHUNK_FACET_BASE = "org.pickaid.pibrary.api.facet.PiStateChunkFacet";
     private static final String FIELD_ANNOTATION = PiField.class.getName();
     private static final String INFERRED_FIELD_CODEC = PiInferredFieldCodec.class.getName();
 
@@ -97,12 +94,16 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private final Set<String> packetProviderTypes = new LinkedHashSet<>();
     private final Set<String> livingFacetProviderTypes = new LinkedHashSet<>();
     private final Set<String> levelFacetProviderTypes = new LinkedHashSet<>();
-    private final Set<String> chunkProviderTypes = new LinkedHashSet<>();
+    private final Set<String> chunkFacetProviderTypes = new LinkedHashSet<>();
     private final Map<String, String> schemaIds = new LinkedHashMap<>();
     private final Map<String, String> packetIds = new LinkedHashMap<>();
+    private final Map<String, String> livingFacetIds = new LinkedHashMap<>();
+    private final Map<String, String> levelFacetIds = new LinkedHashMap<>();
+    private final Map<String, String> chunkFacetIds = new LinkedHashMap<>();
     private PiProcessorAnnotationSupport annotationSupport;
     private PiProcessorFieldAuthoringSupport fieldSupport;
     private PiProcessorPacketAuthoringSupport packetSupport;
+    private PiProcessorFacetAuthoringSupport facetSupport;
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -125,6 +126,34 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 CLIENT_PACKET,
                 BIDIRECTIONAL_PACKET
         );
+        this.facetSupport = new PiProcessorFacetAuthoringSupport(
+                processingEnv,
+                annotationSupport,
+                new PiProcessorFacetAuthoringSupport.FacetContract(
+                        "@PiLivingFacet",
+                        LIVING_FACET_ANNOTATION,
+                        LIVING_FACET_CONTEXT,
+                        STATEFUL_LIVING_FACET_BASE,
+                        "PiStateLivingEntityFacet",
+                        "facets"
+                ),
+                new PiProcessorFacetAuthoringSupport.FacetContract(
+                        "@PiLevelFacet",
+                        LEVEL_FACET_ANNOTATION,
+                        LEVEL_FACET_CONTEXT,
+                        STATEFUL_LEVEL_FACET_BASE,
+                        "PiStateLevelFacet",
+                        "facets"
+                ),
+                new PiProcessorFacetAuthoringSupport.FacetContract(
+                        "@PiChunkFacet",
+                        CHUNK_FACET_ANNOTATION,
+                        CHUNK_FACET_CONTEXT,
+                        STATEFUL_CHUNK_FACET_BASE,
+                        "PiStateChunkFacet",
+                        "facets"
+                )
+        );
     }
 
     @Override
@@ -134,7 +163,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             writeProviderServiceFile();
             writeLivingProviderServiceFile();
             writeLevelProviderServiceFile();
-            writeChunkProviderServiceFile();
+            writeChunkFacetProviderServiceFile();
             return false;
         }
         annotationSupport.validateAnnotationHosts(roundEnv, PACKET_ANNOTATION);
@@ -223,8 +252,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                     if (!validateConcreteClassType(typeElement, "@PiLivingFacet")) {
                         continue;
                     }
-                    PiLivingFacetSpec spec = livingFacetSpec(typeElement);
-                    if (spec != null) {
+                    PiLivingFacetSpec spec = facetSupport.resolveLivingFacetSpec(typeElement);
+                    if (spec != null && reserveGeneratedId(typeElement, livingFacetIds, "living facet", spec.namespace(), spec.path())) {
                         PiProcessorLivingGenerationSupport.generateLivingDescriptorType(
                                 processingEnv,
                                 typeElement,
@@ -250,8 +279,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                     if (!validateConcreteClassType(typeElement, "@PiLevelFacet")) {
                         continue;
                     }
-                    PiLevelFacetSpec spec = levelFacetSpec(typeElement);
-                    if (spec != null) {
+                    PiLevelFacetSpec spec = facetSupport.resolveLevelFacetSpec(typeElement);
+                    if (spec != null && reserveGeneratedId(typeElement, levelFacetIds, "level facet", spec.namespace(), spec.path())) {
                         PiProcessorLevelGenerationSupport.generateLevelDescriptorType(
                                 processingEnv,
                                 typeElement,
@@ -270,28 +299,28 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 }
             }
         }
-        TypeElement chunkServiceAnnotation = processingEnv.getElementUtils().getTypeElement(CHUNK_SERVICE_ANNOTATION);
-        if (chunkServiceAnnotation != null) {
-            for (Element element : roundEnv.getElementsAnnotatedWith(chunkServiceAnnotation)) {
+        TypeElement chunkFacetAnnotation = processingEnv.getElementUtils().getTypeElement(CHUNK_FACET_ANNOTATION);
+        if (chunkFacetAnnotation != null) {
+            for (Element element : roundEnv.getElementsAnnotatedWith(chunkFacetAnnotation)) {
                 if (element instanceof TypeElement typeElement) {
-                    if (!validateConcreteClassType(typeElement, "@PiChunkService")) {
+                    if (!validateConcreteClassType(typeElement, "@PiChunkFacet")) {
                         continue;
                     }
-                    PiChunkServiceSpec spec = chunkServiceSpec(typeElement);
-                    if (spec != null) {
-                        PiProcessorChunkGenerationSupport.generateChunkDescriptorType(
+                    PiChunkFacetSpec spec = facetSupport.resolveChunkFacetSpec(typeElement);
+                    if (spec != null && reserveGeneratedId(typeElement, chunkFacetIds, "chunk facet", spec.namespace(), spec.path())) {
+                        PiProcessorChunkFacetGenerationSupport.generateChunkDescriptorType(
                                 processingEnv,
                                 typeElement,
                                 spec,
-                                CHUNK_SERVICE_CONTEXT,
-                                GENERATED_CHUNK_SERVICE_DESCRIPTOR
+                                CHUNK_FACET_CONTEXT,
+                                GENERATED_CHUNK_FACET_DESCRIPTOR
                         );
-                        PiProcessorChunkGenerationSupport.generateChunkProviderType(
+                        PiProcessorChunkFacetGenerationSupport.generateChunkProviderType(
                                 processingEnv,
                                 typeElement,
-                                chunkProviderTypes,
-                                CHUNK_SERVICE_PROVIDER,
-                                CHUNK_SERVICE_REGISTRY
+                                chunkFacetProviderTypes,
+                                CHUNK_FACET_PROVIDER,
+                                CHUNK_FACET_REGISTRY
                         );
                     }
                 }
@@ -362,6 +391,27 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         return true;
     }
 
+    private boolean reserveGeneratedId(
+            TypeElement typeElement,
+            Map<String, String> reservedIds,
+            String generatedKind,
+            String namespace,
+            String path
+    ) {
+        String id = namespace + ":" + path;
+        String owner = typeElement.getQualifiedName().toString();
+        String existing = reservedIds.putIfAbsent(id, owner);
+        if (existing != null && !existing.equals(owner)) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Duplicate Pi " + generatedKind + " id " + id + " already declared by " + existing,
+                    typeElement
+            );
+            return false;
+        }
+        return true;
+    }
+
     private void writePacketProviderServiceFile() {
         PiProcessorServiceFileSupport.writeServiceFile(
                 processingEnv,
@@ -398,236 +448,13 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         );
     }
 
-    private void writeChunkProviderServiceFile() {
+    private void writeChunkFacetProviderServiceFile() {
         PiProcessorServiceFileSupport.writeServiceFile(
                 processingEnv,
-                chunkProviderTypes,
-                CHUNK_SERVICE_PROVIDER,
-                "Failed to generate Pi chunk service provider service file"
+                chunkFacetProviderTypes,
+                CHUNK_FACET_PROVIDER,
+                "Failed to generate Pi chunk facet provider service file"
         );
-    }
-
-    private PiLivingFacetSpec livingFacetSpec(TypeElement typeElement) {
-        PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
-                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LIVING_FACET_CONTEXT);
-        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.MISSING) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLivingFacet types must declare an accessible constructor accepting PiLivingFacetContext",
-                    typeElement
-            );
-            return null;
-        }
-        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.THROWS_CHECKED) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLivingFacet constructors accepting PiLivingFacetContext must not throw checked exceptions because generated descriptors instantiate facets directly",
-                    typeElement
-            );
-            return null;
-        }
-        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LIVING_FACET_ANNOTATION);
-        if (mirror == null) {
-            return null;
-        }
-        Map<String, AnnotationValue> values = annotationSupport.annotationValues(mirror);
-        String namespace = annotationSupport.stringValue(values, "namespace");
-        String path = annotationSupport.stringValue(values, "path");
-        if (namespace == null || path == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLivingFacet requires namespace and path values",
-                    typeElement
-            );
-            return null;
-        }
-        TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
-                processingEnv.getTypeUtils(),
-                typeElement.asType(),
-                STATEFUL_LIVING_FACET_BASE,
-                0
-        );
-        if (stateTypeMirror == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLivingFacet types must extend PiStateLivingEntityFacet<S> with a concrete state type",
-                    typeElement
-            );
-            return null;
-        }
-        if (PiProcessorTypeSupport.isParameterizedDeclaredType(stateTypeMirror)) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLivingFacet types must resolve to a non-parameterized concrete state type",
-                    typeElement
-            );
-            return null;
-        }
-        Element stateElement = processingEnv.getTypeUtils().asElement(stateTypeMirror);
-        String stateQualifiedName = stateTypeMirror.toString();
-        String stateSimpleName = stateElement instanceof TypeElement stateTypeElement
-                ? stateTypeElement.getSimpleName().toString()
-                : stateQualifiedName;
-        String facetSimpleName = typeElement.getSimpleName().toString();
-        return new PiLivingFacetSpec(namespace, path, facetSimpleName, stateQualifiedName, stateSimpleName);
-    }
-
-    private PiLevelFacetSpec levelFacetSpec(TypeElement typeElement) {
-        PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
-                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LEVEL_FACET_CONTEXT);
-        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.MISSING) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLevelFacet types must declare an accessible constructor accepting PiLevelFacetContext",
-                    typeElement
-            );
-            return null;
-        }
-        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.THROWS_CHECKED) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLevelFacet constructors accepting PiLevelFacetContext must not throw checked exceptions because generated descriptors instantiate facets directly",
-                    typeElement
-            );
-            return null;
-        }
-        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LEVEL_FACET_ANNOTATION);
-        if (mirror == null) {
-            return null;
-        }
-        Map<String, AnnotationValue> values = annotationSupport.annotationValues(mirror);
-        String namespace = annotationSupport.stringValue(values, "namespace");
-        String path = annotationSupport.stringValue(values, "path");
-        if (namespace == null || path == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLevelFacet requires namespace and path values",
-                    typeElement
-            );
-            return null;
-        }
-        PiResolvedResourceLocation location = PiProcessorSchemaSupport.resolveExplicitResourceLocation(namespace + ":" + path);
-        if (location == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    PiProcessorSchemaSupport.invalidResourceLocationMessage(
-                            "@PiLevelFacet requires namespace and path values to form a valid namespace:path resource location",
-                            namespace + ":" + path
-                    ),
-                    typeElement
-            );
-            return null;
-        }
-        namespace = location.namespace();
-        path = location.path();
-        TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
-                processingEnv.getTypeUtils(),
-                typeElement.asType(),
-                STATEFUL_LEVEL_FACET_BASE,
-                0
-        );
-        if (stateTypeMirror == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLevelFacet types must extend PiStateLevelFacet<S> with a concrete state type",
-                    typeElement
-            );
-            return null;
-        }
-        if (PiProcessorTypeSupport.isParameterizedDeclaredType(stateTypeMirror)) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiLevelFacet types must resolve to a non-parameterized concrete state type",
-                    typeElement
-            );
-            return null;
-        }
-        Element stateElement = processingEnv.getTypeUtils().asElement(stateTypeMirror);
-        String stateQualifiedName = stateTypeMirror.toString();
-        String stateSimpleName = stateElement instanceof TypeElement stateTypeElement
-                ? stateTypeElement.getSimpleName().toString()
-                : stateQualifiedName;
-        String facetSimpleName = typeElement.getSimpleName().toString();
-        return new PiLevelFacetSpec(namespace, path, facetSimpleName, stateQualifiedName, stateSimpleName);
-    }
-
-    private PiChunkServiceSpec chunkServiceSpec(TypeElement typeElement) {
-        PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
-                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, CHUNK_SERVICE_CONTEXT);
-        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.MISSING) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiChunkService types must declare an accessible constructor accepting PiChunkServiceContext",
-                    typeElement
-            );
-            return null;
-        }
-        if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.THROWS_CHECKED) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiChunkService constructors accepting PiChunkServiceContext must not throw checked exceptions because generated descriptors instantiate services directly",
-                    typeElement
-            );
-            return null;
-        }
-        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, CHUNK_SERVICE_ANNOTATION);
-        if (mirror == null) {
-            return null;
-        }
-        Map<String, AnnotationValue> values = annotationSupport.annotationValues(mirror);
-        String namespace = annotationSupport.stringValue(values, "namespace");
-        String path = annotationSupport.stringValue(values, "path");
-        if (namespace == null || path == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiChunkService requires namespace and path values",
-                    typeElement
-            );
-            return null;
-        }
-        PiResolvedResourceLocation location = PiProcessorSchemaSupport.resolveExplicitResourceLocation(namespace + ":" + path);
-        if (location == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    PiProcessorSchemaSupport.invalidResourceLocationMessage(
-                            "@PiChunkService requires namespace and path values to form a valid namespace:path resource location",
-                            namespace + ":" + path
-                    ),
-                    typeElement
-            );
-            return null;
-        }
-        namespace = location.namespace();
-        path = location.path();
-        TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
-                processingEnv.getTypeUtils(),
-                typeElement.asType(),
-                STATEFUL_CHUNK_SERVICE_BASE,
-                0
-        );
-        if (stateTypeMirror == null) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiChunkService types must extend PiStateChunkService<S> with a concrete state type",
-                    typeElement
-            );
-            return null;
-        }
-        if (PiProcessorTypeSupport.isParameterizedDeclaredType(stateTypeMirror)) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "@PiChunkService types must resolve to a non-parameterized concrete state type",
-                    typeElement
-            );
-            return null;
-        }
-        Element stateElement = processingEnv.getTypeUtils().asElement(stateTypeMirror);
-        String stateQualifiedName = stateTypeMirror.toString();
-        String stateSimpleName = stateElement instanceof TypeElement stateTypeElement
-                ? stateTypeElement.getSimpleName().toString()
-                : stateQualifiedName;
-        String serviceSimpleName = typeElement.getSimpleName().toString();
-        return new PiChunkServiceSpec(namespace, path, serviceSimpleName, stateQualifiedName, stateSimpleName);
     }
 
     private PiSchemaIdentity resolveSchemaIdentity(TypeElement typeElement) {
