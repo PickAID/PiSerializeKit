@@ -10,53 +10,53 @@ import javax.tools.StandardLocation;
 import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Test;
 
-class PiLevelServiceProcessorTest {
+class PiLevelFacetProcessorTest {
     @Test
-    void generatesLevelServiceDescriptorAndProvider() throws Exception {
+    void generatesLevelFacetDescriptorAndProvider() throws Exception {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLevelService {",
+                "public @interface PiLevelFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLevelServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLevelFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLevelServiceDescriptor<T, S> {",
+                "public interface PiLevelFacetDescriptor<T, S> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "  Class<S> stateType();",
-                "  T create(PiLevelServiceContext context);",
+                "  T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiGeneratedLevelServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.level;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLevelFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceDescriptor;",
-                "public abstract class PiGeneratedLevelServiceDescriptor<T, S> implements PiLevelServiceDescriptor<T, S> {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor;",
+                "public abstract class PiGeneratedLevelFacetDescriptor<T, S> implements PiLevelFacetDescriptor<T, S> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLevelServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLevelFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -64,35 +64,35 @@ class PiLevelServiceProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  @Override",
                 "  public Class<S> stateType() {",
                 "    return stateType;",
                 "  }",
-                "  public abstract T create(PiLevelServiceContext context);",
+                "  public abstract T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceRegistry",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceRegistry {",
-                "  void register(PiGeneratedLevelServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetRegistry {",
+                "  void register(PiGeneratedLevelFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceProvider",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceProvider {",
-                "  void register(PiLevelServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetProvider {",
+                "  void register(PiLevelFacetRegistry registry);",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLevelService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLevelService<S> {",
-                "  protected PiStateLevelService(PiLevelServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLevelFacet<S> {",
+                "  protected PiStateLevelFacet(PiLevelFacetContext context) {",
                 "  }",
                 "}"
         );
@@ -112,14 +112,14 @@ class PiLevelServiceProcessorTest {
                 "}"
         );
         JavaFileObject service = JavaFileObjects.forSourceLines(
-                "example.CounterLevelService",
+                "example.CounterLevelFacet",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLevelService;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLevelService;",
-                "@PiLevelService(namespace = \"example\", path = \"counter_level\")",
-                "public final class CounterLevelService extends PiStateLevelService<CounterState> {",
-                "  public CounterLevelService(PiLevelServiceContext context) {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLevelFacet;",
+                "@PiLevelFacet(namespace = \"example\", path = \"counter_level\")",
+                "public final class CounterLevelFacet extends PiStateLevelFacet<CounterState> {",
+                "  public CounterLevelFacet(PiLevelFacetContext context) {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -130,86 +130,86 @@ class PiLevelServiceProcessorTest {
                 .compile(annotation, context, descriptor, generatedDescriptor, registry, provider, base, resourceLocation, state, service);
 
         assertThat(compilation).succeeded();
-        assertThat(compilation).generatedSourceFile("example.CounterLevelService_PiLevelDescriptor");
-        assertThat(compilation).generatedSourceFile("example.CounterLevelService_PiLevelProvider");
+        assertThat(compilation).generatedSourceFile("example.CounterLevelFacet_PiLevelDescriptor");
+        assertThat(compilation).generatedSourceFile("example.CounterLevelFacet_PiLevelProvider");
         assertGeneratedContains(
                 compilation,
-                "example.CounterLevelService_PiLevelDescriptor",
-                "extends PiGeneratedLevelServiceDescriptor<CounterLevelService, CounterState>"
+                "example.CounterLevelFacet_PiLevelDescriptor",
+                "extends PiGeneratedLevelFacetDescriptor<CounterLevelFacet, CounterState>"
         );
         assertGeneratedContains(
                 compilation,
-                "example.CounterLevelService_PiLevelDescriptor",
-                "super(ResourceLocation.fromNamespaceAndPath(\"example\", \"counter_level\"), CounterLevelService.class, CounterState.class);"
+                "example.CounterLevelFacet_PiLevelDescriptor",
+                "super(ResourceLocation.fromNamespaceAndPath(\"example\", \"counter_level\"), CounterLevelFacet.class, CounterState.class);"
         );
         assertGeneratedContains(
                 compilation,
-                "example.CounterLevelService_PiLevelDescriptor",
-                "return new CounterLevelService(context);"
+                "example.CounterLevelFacet_PiLevelDescriptor",
+                "return new CounterLevelFacet(context);"
         );
         assertGeneratedContains(
                 compilation,
-                "example.CounterLevelService_PiLevelProvider",
-                "implements PiLevelServiceProvider"
+                "example.CounterLevelFacet_PiLevelProvider",
+                "implements PiLevelFacetProvider"
         );
         assertGeneratedContains(
                 compilation,
-                "example.CounterLevelService_PiLevelProvider",
-                "registry.register(new CounterLevelService_PiLevelDescriptor());"
+                "example.CounterLevelFacet_PiLevelProvider",
+                "registry.register(new CounterLevelFacet_PiLevelDescriptor());"
         );
         assertGeneratedResourceContains(
                 compilation,
-                "META-INF/services/org.pickaid.pibrary.runtime.level.PiLevelServiceProvider",
-                "example.CounterLevelService_PiLevelProvider"
+                "META-INF/services/org.pickaid.pibrary.runtime.facet.PiLevelFacetProvider",
+                "example.CounterLevelFacet_PiLevelProvider"
         );
     }
 
     @Test
-    void rejectsLevelServiceWithoutAccessibleContextConstructor() {
+    void rejectsLevelFacetWithoutAccessibleContextConstructor() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLevelService {",
+                "public @interface PiLevelFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLevelServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLevelFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLevelServiceDescriptor<T, S> {",
+                "public interface PiLevelFacetDescriptor<T, S> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "  Class<S> stateType();",
-                "  T create(PiLevelServiceContext context);",
+                "  T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiGeneratedLevelServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.level;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLevelFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceDescriptor;",
-                "public abstract class PiGeneratedLevelServiceDescriptor<T, S> implements PiLevelServiceDescriptor<T, S> {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor;",
+                "public abstract class PiGeneratedLevelFacetDescriptor<T, S> implements PiLevelFacetDescriptor<T, S> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLevelServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLevelFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -217,35 +217,35 @@ class PiLevelServiceProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  @Override",
                 "  public Class<S> stateType() {",
                 "    return stateType;",
                 "  }",
-                "  public abstract T create(PiLevelServiceContext context);",
+                "  public abstract T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceRegistry",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceRegistry {",
-                "  void register(PiGeneratedLevelServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetRegistry {",
+                "  void register(PiGeneratedLevelFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceProvider",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceProvider {",
-                "  void register(PiLevelServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetProvider {",
+                "  void register(PiLevelFacetRegistry registry);",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLevelService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLevelService<S> {",
-                "  protected PiStateLevelService() {",
+                "org.pickaid.pibrary.api.facet.PiStateLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLevelFacet<S> {",
+                "  protected PiStateLevelFacet() {",
                 "  }",
                 "}"
         );
@@ -265,12 +265,12 @@ class PiLevelServiceProcessorTest {
                 "}"
         );
         JavaFileObject service = JavaFileObjects.forSourceLines(
-                "example.MissingConstructorLevelService",
+                "example.MissingConstructorLevelFacet",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLevelService;",
-                "import org.pickaid.pibrary.api.service.PiStateLevelService;",
-                "@PiLevelService(namespace = \"example\", path = \"missing_constructor\")",
-                "public final class MissingConstructorLevelService extends PiStateLevelService<CounterState> {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacet;",
+                "import org.pickaid.pibrary.api.facet.PiStateLevelFacet;",
+                "@PiLevelFacet(namespace = \"example\", path = \"missing_constructor\")",
+                "public final class MissingConstructorLevelFacet extends PiStateLevelFacet<CounterState> {",
                 "}"
         );
 
@@ -280,56 +280,56 @@ class PiLevelServiceProcessorTest {
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-                "@PiLevelService types must declare an accessible constructor accepting PiLevelServiceContext"
+                "@PiLevelFacet types must declare an accessible constructor accepting PiLevelFacetContext"
         );
     }
 
     @Test
-    void rejectsLevelServiceWithInvalidNamespaceOrPath() {
+    void rejectsLevelFacetWithInvalidNamespaceOrPath() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLevelService {",
+                "public @interface PiLevelFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLevelServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLevelFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLevelServiceDescriptor<T, S> {",
+                "public interface PiLevelFacetDescriptor<T, S> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "  Class<S> stateType();",
-                "  T create(PiLevelServiceContext context);",
+                "  T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiGeneratedLevelServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.level;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLevelFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceDescriptor;",
-                "public abstract class PiGeneratedLevelServiceDescriptor<T, S> implements PiLevelServiceDescriptor<T, S> {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor;",
+                "public abstract class PiGeneratedLevelFacetDescriptor<T, S> implements PiLevelFacetDescriptor<T, S> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLevelServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLevelFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -337,28 +337,28 @@ class PiLevelServiceProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  @Override",
                 "  public Class<S> stateType() {",
                 "    return stateType;",
                 "  }",
-                "  public abstract T create(PiLevelServiceContext context);",
+                "  public abstract T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceRegistry",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceRegistry {",
-                "  void register(PiGeneratedLevelServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetRegistry {",
+                "  void register(PiGeneratedLevelFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceProvider",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceProvider {",
-                "  void register(PiLevelServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetProvider {",
+                "  void register(PiLevelFacetRegistry registry);",
                 "}"
         );
         JavaFileObject resourceLocation = JavaFileObjects.forSourceLines(
@@ -371,10 +371,10 @@ class PiLevelServiceProcessorTest {
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLevelService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLevelService<S> {",
-                "  protected PiStateLevelService(PiLevelServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLevelFacet<S> {",
+                "  protected PiStateLevelFacet(PiLevelFacetContext context) {",
                 "  }",
                 "}"
         );
@@ -385,14 +385,14 @@ class PiLevelServiceProcessorTest {
                 "}"
         );
         JavaFileObject service = JavaFileObjects.forSourceLines(
-                "example.InvalidLocationLevelService",
+                "example.InvalidLocationLevelFacet",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLevelService;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLevelService;",
-                "@PiLevelService(namespace = \"bad namespace\", path = \"counter level\")",
-                "public final class InvalidLocationLevelService extends PiStateLevelService<CounterState> {",
-                "  public InvalidLocationLevelService(PiLevelServiceContext context) {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLevelFacet;",
+                "@PiLevelFacet(namespace = \"bad namespace\", path = \"counter level\")",
+                "public final class InvalidLocationLevelFacet extends PiStateLevelFacet<CounterState> {",
+                "  public InvalidLocationLevelFacet(PiLevelFacetContext context) {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -404,37 +404,37 @@ class PiLevelServiceProcessorTest {
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-                "@PiLevelService requires namespace and path values to form a valid namespace:path resource location"
+                "@PiLevelFacet requires namespace and path values to form a valid namespace:path resource location"
         );
     }
 
     @Test
-    void rejectsLevelServiceWithParameterizedInferredStateType() {
+    void rejectsLevelFacetWithParameterizedInferredStateType() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLevelService {",
+                "public @interface PiLevelFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLevelServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLevelFacetContext {",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLevelService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLevelService<S> {",
-                "  protected PiStateLevelService(PiLevelServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLevelFacet<S> {",
+                "  protected PiStateLevelFacet(PiLevelFacetContext context) {",
                 "  }",
                 "}"
         );
@@ -445,14 +445,14 @@ class PiLevelServiceProcessorTest {
                 "}"
         );
         JavaFileObject service = JavaFileObjects.forSourceLines(
-                "example.ComboLevelService",
+                "example.ComboLevelFacet",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLevelService;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLevelService;",
-                "@PiLevelService(namespace = \"example\", path = \"combo_level\")",
-                "public final class ComboLevelService extends PiStateLevelService<ExampleState<String>> {",
-                "  public ComboLevelService(PiLevelServiceContext context) {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLevelFacet;",
+                "@PiLevelFacet(namespace = \"example\", path = \"combo_level\")",
+                "public final class ComboLevelFacet extends PiStateLevelFacet<ExampleState<String>> {",
+                "  public ComboLevelFacet(PiLevelFacetContext context) {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -464,56 +464,56 @@ class PiLevelServiceProcessorTest {
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-                "@PiLevelService types must resolve to a non-parameterized concrete state type"
+                "@PiLevelFacet types must resolve to a non-parameterized concrete state type"
         );
     }
 
     @Test
-    void rejectsLevelServiceConstructorThatThrowsCheckedException() {
+    void rejectsLevelFacetConstructorThatThrowsCheckedException() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLevelService {",
+                "public @interface PiLevelFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLevelServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLevelFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLevelServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLevelServiceDescriptor<T, S> {",
+                "public interface PiLevelFacetDescriptor<T, S> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "  Class<S> stateType();",
-                "  T create(PiLevelServiceContext context);",
+                "  T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiGeneratedLevelServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.level;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLevelFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceDescriptor;",
-                "public abstract class PiGeneratedLevelServiceDescriptor<T, S> implements PiLevelServiceDescriptor<T, S> {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetDescriptor;",
+                "public abstract class PiGeneratedLevelFacetDescriptor<T, S> implements PiLevelFacetDescriptor<T, S> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLevelServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLevelFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -521,28 +521,28 @@ class PiLevelServiceProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  @Override",
                 "  public Class<S> stateType() {",
                 "    return stateType;",
                 "  }",
-                "  public abstract T create(PiLevelServiceContext context);",
+                "  public abstract T create(PiLevelFacetContext context);",
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceRegistry",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceRegistry {",
-                "  void register(PiGeneratedLevelServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetRegistry {",
+                "  void register(PiGeneratedLevelFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.level.PiLevelServiceProvider",
-                "package org.pickaid.pibrary.runtime.level;",
-                "public interface PiLevelServiceProvider {",
-                "  void register(PiLevelServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLevelFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLevelFacetProvider {",
+                "  void register(PiLevelFacetRegistry registry);",
                 "}"
         );
         JavaFileObject resourceLocation = JavaFileObjects.forSourceLines(
@@ -561,15 +561,15 @@ class PiLevelServiceProcessorTest {
                 "}"
         );
         JavaFileObject service = JavaFileObjects.forSourceLines(
-                "example.ComboLevelService",
+                "example.ComboLevelFacet",
                 "package example;",
                 "import java.io.IOException;",
-                "import org.pickaid.pibrary.api.service.PiLevelService;",
-                "import org.pickaid.pibrary.api.service.PiLevelServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLevelService;",
-                "@PiLevelService(namespace = \"example\", path = \"combo_level\")",
-                "public final class ComboLevelService extends PiStateLevelService<CounterState> {",
-                "  public ComboLevelService(PiLevelServiceContext context) throws IOException {",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLevelFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLevelFacet;",
+                "@PiLevelFacet(namespace = \"example\", path = \"combo_level\")",
+                "public final class ComboLevelFacet extends PiStateLevelFacet<CounterState> {",
+                "  public ComboLevelFacet(PiLevelFacetContext context) throws IOException {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -581,7 +581,7 @@ class PiLevelServiceProcessorTest {
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-                "@PiLevelService constructors accepting PiLevelServiceContext must not throw checked exceptions because generated descriptors instantiate services directly"
+                "@PiLevelFacet constructors accepting PiLevelFacetContext must not throw checked exceptions because generated descriptors instantiate facets directly"
         );
     }
 

@@ -30,9 +30,9 @@ import org.pickaid.piserializekit.processor.migration.PiMigrationCollectionResul
 import org.pickaid.piserializekit.processor.migration.PiMigrationValidationFailure;
 import org.pickaid.piserializekit.processor.model.PiAfterDecodeSpec;
 import org.pickaid.piserializekit.processor.model.PiChunkServiceSpec;
-import org.pickaid.piserializekit.processor.model.PiLevelServiceSpec;
 import org.pickaid.piserializekit.processor.model.PiFieldSpec;
-import org.pickaid.piserializekit.processor.model.PiLivingServiceSpec;
+import org.pickaid.piserializekit.processor.model.PiLevelFacetSpec;
+import org.pickaid.piserializekit.processor.model.PiLivingFacetSpec;
 import org.pickaid.piserializekit.processor.model.PiMigrationPlan;
 import org.pickaid.piserializekit.processor.model.PiPacketSpec;
 import org.pickaid.piserializekit.processor.model.PiResolvedResourceLocation;
@@ -59,8 +59,8 @@ import org.pickaid.piserializekit.processor.support.PiProcessorTypeSupport;
         "org.pickaid.piserializekit.api.schema.PiSchemaUpgrade",
         "org.pickaid.piserializekit.api.packet.PiPacket",
         "org.pickaid.piserializekit.api.packet.PiPacketUpgrade",
-        "org.pickaid.pibrary.api.service.PiLivingService",
-        "org.pickaid.pibrary.api.service.PiLevelService",
+        "org.pickaid.pibrary.api.facet.PiLivingFacet",
+        "org.pickaid.pibrary.api.facet.PiLevelFacet",
         "org.pickaid.pibrary.api.service.PiChunkService"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
@@ -72,19 +72,18 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private static final String SERVER_PACKET = "org.pickaid.piserializekit.api.packet.PiServerPacket";
     private static final String CLIENT_PACKET = "org.pickaid.piserializekit.api.packet.PiClientPacket";
     private static final String BIDIRECTIONAL_PACKET = "org.pickaid.piserializekit.api.packet.PiBidirectionalPacket";
-    private static final String LIVING_SERVICE_ANNOTATION = "org.pickaid.pibrary.api.service.PiLivingService";
-    private static final String LIVING_SERVICE_CONTEXT = "org.pickaid.pibrary.api.service.PiLivingServiceContext";
-    private static final String LIVING_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.api.service.PiLivingServiceDescriptor";
-    private static final String GENERATED_LIVING_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.runtime.service.PiGeneratedLivingServiceDescriptor";
-    private static final String LIVING_SERVICE_PROVIDER = "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider";
-    private static final String LIVING_SERVICE_REGISTRY = "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry";
-    private static final String STATEFUL_LIVING_SERVICE_BASE = "org.pickaid.pibrary.api.service.PiStateLivingEntityService";
-    private static final String LEVEL_SERVICE_ANNOTATION = "org.pickaid.pibrary.api.service.PiLevelService";
-    private static final String LEVEL_SERVICE_CONTEXT = "org.pickaid.pibrary.api.service.PiLevelServiceContext";
-    private static final String GENERATED_LEVEL_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.runtime.level.PiGeneratedLevelServiceDescriptor";
-    private static final String LEVEL_SERVICE_PROVIDER = "org.pickaid.pibrary.runtime.level.PiLevelServiceProvider";
-    private static final String LEVEL_SERVICE_REGISTRY = "org.pickaid.pibrary.runtime.level.PiLevelServiceRegistry";
-    private static final String STATEFUL_LEVEL_SERVICE_BASE = "org.pickaid.pibrary.api.service.PiStateLevelService";
+    private static final String LIVING_FACET_ANNOTATION = "org.pickaid.pibrary.api.facet.PiLivingFacet";
+    private static final String LIVING_FACET_CONTEXT = "org.pickaid.pibrary.api.facet.PiLivingFacetContext";
+    private static final String GENERATED_LIVING_FACET_DESCRIPTOR = "org.pickaid.pibrary.runtime.facet.PiGeneratedLivingFacetDescriptor";
+    private static final String LIVING_FACET_PROVIDER = "org.pickaid.pibrary.runtime.facet.PiLivingFacetProvider";
+    private static final String LIVING_FACET_REGISTRY = "org.pickaid.pibrary.runtime.facet.PiLivingFacetRegistry";
+    private static final String STATEFUL_LIVING_FACET_BASE = "org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet";
+    private static final String LEVEL_FACET_ANNOTATION = "org.pickaid.pibrary.api.facet.PiLevelFacet";
+    private static final String LEVEL_FACET_CONTEXT = "org.pickaid.pibrary.api.facet.PiLevelFacetContext";
+    private static final String GENERATED_LEVEL_FACET_DESCRIPTOR = "org.pickaid.pibrary.runtime.facet.PiGeneratedLevelFacetDescriptor";
+    private static final String LEVEL_FACET_PROVIDER = "org.pickaid.pibrary.runtime.facet.PiLevelFacetProvider";
+    private static final String LEVEL_FACET_REGISTRY = "org.pickaid.pibrary.runtime.facet.PiLevelFacetRegistry";
+    private static final String STATEFUL_LEVEL_FACET_BASE = "org.pickaid.pibrary.api.facet.PiStateLevelFacet";
     private static final String CHUNK_SERVICE_ANNOTATION = "org.pickaid.pibrary.api.service.PiChunkService";
     private static final String CHUNK_SERVICE_CONTEXT = "org.pickaid.pibrary.api.service.PiChunkServiceContext";
     private static final String GENERATED_CHUNK_SERVICE_DESCRIPTOR = "org.pickaid.pibrary.runtime.chunk.PiGeneratedChunkServiceDescriptor";
@@ -96,8 +95,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
 
     private final Set<String> providerTypes = new LinkedHashSet<>();
     private final Set<String> packetProviderTypes = new LinkedHashSet<>();
-    private final Set<String> livingProviderTypes = new LinkedHashSet<>();
-    private final Set<String> levelProviderTypes = new LinkedHashSet<>();
+    private final Set<String> livingFacetProviderTypes = new LinkedHashSet<>();
+    private final Set<String> levelFacetProviderTypes = new LinkedHashSet<>();
     private final Set<String> chunkProviderTypes = new LinkedHashSet<>();
     private final Map<String, String> schemaIds = new LinkedHashMap<>();
     private final Map<String, String> packetIds = new LinkedHashMap<>();
@@ -217,55 +216,55 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
                 PiProcessorSchemaGenerationSupport.generateSchemaProviderType(processingEnv, typeElement, providerTypes);
             }
         }
-        TypeElement livingServiceAnnotation = processingEnv.getElementUtils().getTypeElement(LIVING_SERVICE_ANNOTATION);
-        if (livingServiceAnnotation != null) {
-            for (Element element : roundEnv.getElementsAnnotatedWith(livingServiceAnnotation)) {
+        TypeElement livingFacetAnnotation = processingEnv.getElementUtils().getTypeElement(LIVING_FACET_ANNOTATION);
+        if (livingFacetAnnotation != null) {
+            for (Element element : roundEnv.getElementsAnnotatedWith(livingFacetAnnotation)) {
                 if (element instanceof TypeElement typeElement) {
-                    if (!validateConcreteClassType(typeElement, "@PiLivingService")) {
+                    if (!validateConcreteClassType(typeElement, "@PiLivingFacet")) {
                         continue;
                     }
-                    PiLivingServiceSpec spec = livingServiceSpec(typeElement);
+                    PiLivingFacetSpec spec = livingFacetSpec(typeElement);
                     if (spec != null) {
                         PiProcessorLivingGenerationSupport.generateLivingDescriptorType(
                                 processingEnv,
                                 typeElement,
                                 spec,
-                                LIVING_SERVICE_CONTEXT,
-                                GENERATED_LIVING_SERVICE_DESCRIPTOR
+                                LIVING_FACET_CONTEXT,
+                                GENERATED_LIVING_FACET_DESCRIPTOR
                         );
                         PiProcessorLivingGenerationSupport.generateLivingProviderType(
                                 processingEnv,
                                 typeElement,
-                                livingProviderTypes,
-                                LIVING_SERVICE_PROVIDER,
-                                LIVING_SERVICE_REGISTRY
+                                livingFacetProviderTypes,
+                                LIVING_FACET_PROVIDER,
+                                LIVING_FACET_REGISTRY
                         );
                     }
                 }
             }
         }
-        TypeElement levelServiceAnnotation = processingEnv.getElementUtils().getTypeElement(LEVEL_SERVICE_ANNOTATION);
-        if (levelServiceAnnotation != null) {
-            for (Element element : roundEnv.getElementsAnnotatedWith(levelServiceAnnotation)) {
+        TypeElement levelFacetAnnotation = processingEnv.getElementUtils().getTypeElement(LEVEL_FACET_ANNOTATION);
+        if (levelFacetAnnotation != null) {
+            for (Element element : roundEnv.getElementsAnnotatedWith(levelFacetAnnotation)) {
                 if (element instanceof TypeElement typeElement) {
-                    if (!validateConcreteClassType(typeElement, "@PiLevelService")) {
+                    if (!validateConcreteClassType(typeElement, "@PiLevelFacet")) {
                         continue;
                     }
-                    PiLevelServiceSpec spec = levelServiceSpec(typeElement);
+                    PiLevelFacetSpec spec = levelFacetSpec(typeElement);
                     if (spec != null) {
                         PiProcessorLevelGenerationSupport.generateLevelDescriptorType(
                                 processingEnv,
                                 typeElement,
                                 spec,
-                                LEVEL_SERVICE_CONTEXT,
-                                GENERATED_LEVEL_SERVICE_DESCRIPTOR
+                                LEVEL_FACET_CONTEXT,
+                                GENERATED_LEVEL_FACET_DESCRIPTOR
                         );
                         PiProcessorLevelGenerationSupport.generateLevelProviderType(
                                 processingEnv,
                                 typeElement,
-                                levelProviderTypes,
-                                LEVEL_SERVICE_PROVIDER,
-                                LEVEL_SERVICE_REGISTRY
+                                levelFacetProviderTypes,
+                                LEVEL_FACET_PROVIDER,
+                                LEVEL_FACET_REGISTRY
                         );
                     }
                 }
@@ -384,18 +383,18 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
     private void writeLivingProviderServiceFile() {
         PiProcessorServiceFileSupport.writeServiceFile(
                 processingEnv,
-                livingProviderTypes,
-                LIVING_SERVICE_PROVIDER,
-                "Failed to generate Pi living service provider service file"
+                livingFacetProviderTypes,
+                LIVING_FACET_PROVIDER,
+                "Failed to generate Pi living facet provider service file"
         );
     }
 
     private void writeLevelProviderServiceFile() {
         PiProcessorServiceFileSupport.writeServiceFile(
                 processingEnv,
-                levelProviderTypes,
-                LEVEL_SERVICE_PROVIDER,
-                "Failed to generate Pi level service provider service file"
+                levelFacetProviderTypes,
+                LEVEL_FACET_PROVIDER,
+                "Failed to generate Pi level facet provider service file"
         );
     }
 
@@ -408,13 +407,13 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         );
     }
 
-    private PiLivingServiceSpec livingServiceSpec(TypeElement typeElement) {
+    private PiLivingFacetSpec livingFacetSpec(TypeElement typeElement) {
         PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
-                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LIVING_SERVICE_CONTEXT);
+                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LIVING_FACET_CONTEXT);
         if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.MISSING) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLivingService types must declare an accessible constructor accepting PiLivingServiceContext",
+                    "@PiLivingFacet types must declare an accessible constructor accepting PiLivingFacetContext",
                     typeElement
             );
             return null;
@@ -422,12 +421,12 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.THROWS_CHECKED) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLivingService constructors accepting PiLivingServiceContext must not throw checked exceptions because generated descriptors instantiate services directly",
+                    "@PiLivingFacet constructors accepting PiLivingFacetContext must not throw checked exceptions because generated descriptors instantiate facets directly",
                     typeElement
             );
             return null;
         }
-        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LIVING_SERVICE_ANNOTATION);
+        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LIVING_FACET_ANNOTATION);
         if (mirror == null) {
             return null;
         }
@@ -437,7 +436,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (namespace == null || path == null) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLivingService requires namespace and path values",
+                    "@PiLivingFacet requires namespace and path values",
                     typeElement
             );
             return null;
@@ -445,13 +444,13 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
                 processingEnv.getTypeUtils(),
                 typeElement.asType(),
-                STATEFUL_LIVING_SERVICE_BASE,
+                STATEFUL_LIVING_FACET_BASE,
                 0
         );
         if (stateTypeMirror == null) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLivingService types must extend PiStateLivingEntityService<S> with a concrete state type",
+                    "@PiLivingFacet types must extend PiStateLivingEntityFacet<S> with a concrete state type",
                     typeElement
             );
             return null;
@@ -459,7 +458,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (PiProcessorTypeSupport.isParameterizedDeclaredType(stateTypeMirror)) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLivingService types must resolve to a non-parameterized concrete state type",
+                    "@PiLivingFacet types must resolve to a non-parameterized concrete state type",
                     typeElement
             );
             return null;
@@ -469,17 +468,17 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         String stateSimpleName = stateElement instanceof TypeElement stateTypeElement
                 ? stateTypeElement.getSimpleName().toString()
                 : stateQualifiedName;
-        String serviceSimpleName = typeElement.getSimpleName().toString();
-        return new PiLivingServiceSpec(namespace, path, serviceSimpleName, stateQualifiedName, stateSimpleName);
+        String facetSimpleName = typeElement.getSimpleName().toString();
+        return new PiLivingFacetSpec(namespace, path, facetSimpleName, stateQualifiedName, stateSimpleName);
     }
 
-    private PiLevelServiceSpec levelServiceSpec(TypeElement typeElement) {
+    private PiLevelFacetSpec levelFacetSpec(TypeElement typeElement) {
         PiProcessorExecutableSupport.MatchingConstructorStatus constructorStatus =
-                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LEVEL_SERVICE_CONTEXT);
+                PiProcessorExecutableSupport.matchingConstructorStatus(processingEnv, typeElement, LEVEL_FACET_CONTEXT);
         if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.MISSING) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLevelService types must declare an accessible constructor accepting PiLevelServiceContext",
+                    "@PiLevelFacet types must declare an accessible constructor accepting PiLevelFacetContext",
                     typeElement
             );
             return null;
@@ -487,12 +486,12 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (constructorStatus == PiProcessorExecutableSupport.MatchingConstructorStatus.THROWS_CHECKED) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLevelService constructors accepting PiLevelServiceContext must not throw checked exceptions because generated descriptors instantiate services directly",
+                    "@PiLevelFacet constructors accepting PiLevelFacetContext must not throw checked exceptions because generated descriptors instantiate facets directly",
                     typeElement
             );
             return null;
         }
-        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LEVEL_SERVICE_ANNOTATION);
+        AnnotationMirror mirror = annotationSupport.findAnnotation(typeElement, LEVEL_FACET_ANNOTATION);
         if (mirror == null) {
             return null;
         }
@@ -502,7 +501,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (namespace == null || path == null) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLevelService requires namespace and path values",
+                    "@PiLevelFacet requires namespace and path values",
                     typeElement
             );
             return null;
@@ -512,7 +511,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
                     PiProcessorSchemaSupport.invalidResourceLocationMessage(
-                            "@PiLevelService requires namespace and path values to form a valid namespace:path resource location",
+                            "@PiLevelFacet requires namespace and path values to form a valid namespace:path resource location",
                             namespace + ":" + path
                     ),
                     typeElement
@@ -524,13 +523,13 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         TypeMirror stateTypeMirror = PiProcessorTypeSupport.resolveConcreteTypeArgumentInHierarchy(
                 processingEnv.getTypeUtils(),
                 typeElement.asType(),
-                STATEFUL_LEVEL_SERVICE_BASE,
+                STATEFUL_LEVEL_FACET_BASE,
                 0
         );
         if (stateTypeMirror == null) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLevelService types must extend PiStateLevelService<S> with a concrete state type",
+                    "@PiLevelFacet types must extend PiStateLevelFacet<S> with a concrete state type",
                     typeElement
             );
             return null;
@@ -538,7 +537,7 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         if (PiProcessorTypeSupport.isParameterizedDeclaredType(stateTypeMirror)) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "@PiLevelService types must resolve to a non-parameterized concrete state type",
+                    "@PiLevelFacet types must resolve to a non-parameterized concrete state type",
                     typeElement
             );
             return null;
@@ -548,8 +547,8 @@ public final class PiSyncModelProcessor extends AbstractProcessor {
         String stateSimpleName = stateElement instanceof TypeElement stateTypeElement
                 ? stateTypeElement.getSimpleName().toString()
                 : stateQualifiedName;
-        String serviceSimpleName = typeElement.getSimpleName().toString();
-        return new PiLevelServiceSpec(namespace, path, serviceSimpleName, stateQualifiedName, stateSimpleName);
+        String facetSimpleName = typeElement.getSimpleName().toString();
+        return new PiLevelFacetSpec(namespace, path, facetSimpleName, stateQualifiedName, stateSimpleName);
     }
 
     private PiChunkServiceSpec chunkServiceSpec(TypeElement typeElement) {

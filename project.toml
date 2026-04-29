@@ -1,6 +1,9 @@
 schema_version = 1
-template_version = "1.20.1-template-1.0.0"
+template_version = "1.20.1-template-1.1.0"
 
+# Mod identity and published Maven coordinates.
+# Keep this block explicit: these values feed mods.toml, jar naming, Maven
+# publication, CurseForge, and Modrinth.
 [mod]
 mod_id = "piserializekit"
 mod_name = "PiSerializeKit"
@@ -13,16 +16,33 @@ description = "Independent serialization foundation for the Pi stack.\nShared co
 credits = "None"
 issue_tracker_url = "https://github.com/PickAID/PiSerializeKit/issues"
 
+# Built-in ecosystem switches handled by the template.
+# Enable these only when the project source actually imports the API. Local-only
+# helper mods for testing belong in [dev_packs], not here.
 [features]
-# Built-in ecosystem switches handled directly by the template build.
 jei = false
 curios = false
 geckolib = false
 player_animator = false
-mixin_extras = true
+mixin_extras = false
 
+# Local development helper packs.
+# These are convenient runtime packs for runClient/runServer. They are not part
+# of PiSerializeKit's published API and should stay disabled unless a local test
+# needs them.
+[dev_packs]
+# JEI + Jade for recipe lookup and in-world inspection during development.
+basic = false
+# AppleSkin on its own when you only want hunger and saturation HUD help.
+appleskin = false
+# Curios runtime when slot/accessory behavior is needed in local runs.
+curios = false
+# Caelus + Iron's Spellbooks for spell-related smoke testing.
+spell = false
+
+# Optional version overrides for enabled built-in features.
+# These keys are validated: an override is only allowed when its feature is on.
 [overrides]
-# Optional version overrides for enabled features only.
 # jei_version = "15.2.0.27"
 # curios_version = "5.9.1+1.20.1"
 # geckolib_version = "4.4.9"
@@ -30,9 +50,11 @@ mixin_extras = true
 # bendylib_version = "1.0.2"
 # mixin_extras_version = "0.2.0-beta.8"
 
+# Extra repositories visible to this project.
+# The template already has curated built-in repositories in
+# gradle/template-defaults.toml. Keep project-specific repositories here so
+# dependency resolution remains reviewable from project.toml.
 [repositories]
-# Common ecosystem repositories are listed directly so the project surface is
-# visible in one place.
 blamejared = "https://maven.blamejared.com/"
 tterrag = "https://maven.tterrag.com/"
 sponge = "https://repo.spongepowered.org/maven"
@@ -44,53 +66,45 @@ architectury = "https://maven.architectury.dev"
 latvian = "https://maven.latvian.dev/releases"
 jitpack = "https://jitpack.io"
 
-# Additional dependencies are grouped by Gradle-style bucket name.
-# Common examples are pre-filled as comments so you can uncomment and adapt them
-# instead of searching for coordinates again.
+# Dependencies are grouped by Gradle-style bucket name. The template turns these
+# tables into real Gradle dependencies; build.gradle should not hard-code normal
+# library dependencies.
 #
-# [dependencies.deobf_api]
-# public_registration_surface = "com.tterrag.registrate:Registrate:MC1.20-1.3.2"
+# Common buckets:
+# - api: normal Java API dependency, exported to consumers.
+# - implementation: normal runtime implementation dependency.
+# - compile_only_api: compile-only but visible to consumers.
+# - compile_only: compile-only and not exported.
+# - runtime_only: runtime-only local/dev dependency.
+# - annotation_processor: Java annotation processors.
+# - test_implementation: unit-test dependency.
+# - deobf_*: same idea, but passed through ForgeGradle fg.deobf.
+# - jarjar: embed the dependency into the final mod jar with a version range.
 #
-# [dependencies.deobf_compile_only]
-# recipe_viewer_common_api = "mezz.jei:jei-1.20.1-common-api:15.2.0.27"
-# recipe_viewer_forge_api = "mezz.jei:jei-1.20.1-forge-api:15.2.0.27"
-# accessory_slot_api = "top.theillusivec4.curios:curios-forge:5.9.1+1.20.1"
-# script_entry_bridge = "dev.latvian.mods:kubejs-forge:2001.6.4-build.120"
-# embedded_js_engine = "dev.latvian.mods:rhino-forge:2001.2.2-build.18"
+# String form:
+# some_library = "group:artifact:version"
 #
-# [dependencies.deobf_runtime_only]
-# recipe_viewer_runtime = "mezz.jei:jei-1.20.1-forge:15.2.0.27"
-# bendy_runtime = "io.github.kosmx.bendy-lib:bendy-lib-forge:1.0.2"
+# Inline-table form:
+# some_library = { notation = "group:artifact:version", transitive = false }
 #
-# [dependencies.deobf_implementation]
-# animation_runtime = "software.bernie.geckolib:geckolib-neoforge-1.20.1:4.4.9"
-# player_animation_runtime = "dev.kosmx.player-anim:player-animation-lib-forge:1.0.2+1.20"
-# mixin_injection_runtime = "com.github.llamalad7.mixinextras:mixinextras-forge:0.2.0-beta.8"
-# platform_runtime_bridge = { notation = "dev.architectury:architectury-forge:9.1.12", transitive = false }
-#
-# [dependencies.compile_only]
-# mixin_injection_common = "com.github.llamalad7.mixinextras:mixinextras-common:0.2.0-beta.8"
-#
-# [dependencies.annotation_processor]
-# mixin_injection_processor = "com.github.llamalad7.mixinextras:mixinextras-common:0.2.0-beta.8"
+# jarjar form:
+# embedded_library = { notation = "group:artifact:version", range = "[version, nextVersion)" }
+[dependencies]
 
-[dependencies.deobf_compile_only]
-# Local script-facing compile helpers.
-script_entry_bridge = "dev.latvian.mods:kubejs-forge:2001.6.4-build.120"
-embedded_js_engine = "dev.latvian.mods:rhino-forge:2001.2.2-build.18"
+[dependencies.test_implementation]
+# Compile-testing powers the annotation processor contract tests.
+compile_testing = "com.google.testing.compile:compile-testing:0.21.0"
 
-[dependencies.deobf_implementation]
-# Runtime dependency needed by PiSerializeKit's current Forge integration layer.
-platform_runtime_bridge = { notation = "dev.architectury:architectury-forge:9.1.12", transitive = false }
-
+# Publication targets. Real credentials must stay out of git; put them in
+# environment variables or project.local.toml when testing locally.
 [publish]
-# Leave tokens out of git. Prefer environment variables for real releases.
 maven_url = "https://maven.mihono.cn/repository/pickaid1201/"
 curseforge_project = 0
 modrinth_project = ""
 release_type = "alpha"
 
+# Jar naming. Supported tokens: {archive_name}, {mod_id}, {version},
+# {mc_version}, {loader}.
 [naming]
-# Published jar naming.
 archive_name = "piserializekit"
 jar_format = "{archive_name}-{mc_version}-{version}"

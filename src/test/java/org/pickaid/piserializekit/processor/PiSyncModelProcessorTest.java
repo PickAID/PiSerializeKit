@@ -1585,52 +1585,52 @@ class PiSyncModelProcessorTest {
     }
 
     @Test
-    void generatesLivingServiceDescriptorAndProvider() throws Exception {
+    void generatesLivingFacetDescriptorAndProvider() throws Exception {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLivingService {",
+                "public @interface PiLivingFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLivingServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLivingFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLivingServiceDescriptor<T, S> {",
+                "public interface PiLivingFacetDescriptor<T, S> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "  Class<S> stateType();",
-                "  T create(PiLivingServiceContext context);",
+                "  T create(PiLivingFacetContext context);",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiGeneratedLivingServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.service;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLivingFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
                 "import net.minecraftforge.common.capabilities.Capability;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceDescriptor;",
-                "public abstract class PiGeneratedLivingServiceDescriptor<T, S> implements PiLivingServiceDescriptor<T, S> {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor;",
+                "public abstract class PiGeneratedLivingFacetDescriptor<T, S> implements PiLivingFacetDescriptor<T, S> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLivingServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLivingFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -1638,8 +1638,8 @@ class PiSyncModelProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  @Override",
                 "  public Class<S> stateType() {",
@@ -1649,24 +1649,24 @@ class PiSyncModelProcessorTest {
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceRegistry {",
-                "  void register(PiGeneratedLivingServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetRegistry {",
+                "  void register(PiGeneratedLivingFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceProvider {",
-                "  void register(PiLivingServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetProvider {",
+                "  void register(PiLivingFacetRegistry registry);",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLivingEntityService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLivingEntityService<S> {",
-                "  protected PiStateLivingEntityService(PiLivingServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLivingEntityFacet<S> {",
+                "  protected PiStateLivingEntityFacet(PiLivingFacetContext context) {",
                 "  }",
                 "}"
         );
@@ -1702,12 +1702,12 @@ class PiSyncModelProcessorTest {
         JavaFileObject service = JavaFileObjects.forSourceLines(
                 "example.ComboService",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLivingService;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLivingEntityService;",
-                "@PiLivingService(namespace = \"example\", path = \"combo\")",
-                "public final class ComboService extends PiStateLivingEntityService<CounterState> {",
-                "  public ComboService(PiLivingServiceContext context) {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet;",
+                "@PiLivingFacet(namespace = \"example\", path = \"combo\")",
+                "public final class ComboService extends PiStateLivingEntityFacet<CounterState> {",
+                "  public ComboService(PiLivingFacetContext context) {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -1720,63 +1720,63 @@ class PiSyncModelProcessorTest {
         assertThat(compilation).succeeded();
         assertThat(compilation).generatedSourceFile("example.ComboService_PiLivingDescriptor");
         assertThat(compilation).generatedSourceFile("example.ComboService_PiLivingProvider");
-        assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "extends PiGeneratedLivingServiceDescriptor<ComboService, CounterState>");
+        assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "extends PiGeneratedLivingFacetDescriptor<ComboService, CounterState>");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "private static final class CapabilityHolder {");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "private static final Capability<ComboService> VALUE = CapabilityManager.get(new CapabilityToken<>()");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "super(ResourceLocation.fromNamespaceAndPath(\"example\", \"combo\"), ComboService.class, CounterState.class);");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "return CapabilityHolder.VALUE;");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "return new ComboService(context);");
-        assertGeneratedContains(compilation, "example.ComboService_PiLivingProvider", "implements PiLivingServiceProvider");
+        assertGeneratedContains(compilation, "example.ComboService_PiLivingProvider", "implements PiLivingFacetProvider");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingProvider", "registry.register(new ComboService_PiLivingDescriptor());");
     }
 
     @Test
-    void generatesLivingServiceDescriptorWhenStateTypeComesFromGenericSuperclass() throws Exception {
+    void generatesLivingFacetDescriptorWhenStateTypeComesFromGenericSuperclass() throws Exception {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLivingService {",
+                "public @interface PiLivingFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLivingServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLivingFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLivingServiceDescriptor<T, S> {",
+                "public interface PiLivingFacetDescriptor<T, S> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "  Class<S> stateType();",
-                "  T create(PiLivingServiceContext context);",
+                "  T create(PiLivingFacetContext context);",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiGeneratedLivingServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.service;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLivingFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
                 "import net.minecraftforge.common.capabilities.Capability;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceDescriptor;",
-                "public abstract class PiGeneratedLivingServiceDescriptor<T, S> implements PiLivingServiceDescriptor<T, S> {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor;",
+                "public abstract class PiGeneratedLivingFacetDescriptor<T, S> implements PiLivingFacetDescriptor<T, S> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLivingServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLivingFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -1784,8 +1784,8 @@ class PiSyncModelProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  @Override",
                 "  public Class<S> stateType() {",
@@ -1795,32 +1795,32 @@ class PiSyncModelProcessorTest {
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceRegistry {",
-                "  void register(PiGeneratedLivingServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetRegistry {",
+                "  void register(PiGeneratedLivingFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceProvider {",
-                "  void register(PiLivingServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetProvider {",
+                "  void register(PiLivingFacetRegistry registry);",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLivingEntityService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLivingEntityService<S> {",
-                "  protected PiStateLivingEntityService(PiLivingServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLivingEntityFacet<S> {",
+                "  protected PiStateLivingEntityFacet(PiLivingFacetContext context) {",
                 "  }",
                 "}"
         );
         JavaFileObject playerBase = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStatePlayerService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStatePlayerService<S> extends PiStateLivingEntityService<S> {",
-                "  protected PiStatePlayerService(PiLivingServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStatePlayerFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStatePlayerFacet<S> extends PiStateLivingEntityFacet<S> {",
+                "  protected PiStatePlayerFacet(PiLivingFacetContext context) {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -1857,12 +1857,12 @@ class PiSyncModelProcessorTest {
         JavaFileObject service = JavaFileObjects.forSourceLines(
                 "example.ComboService",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLivingService;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStatePlayerService;",
-                "@PiLivingService(namespace = \"example\", path = \"combo\")",
-                "public final class ComboService extends PiStatePlayerService<CounterState> {",
-                "  public ComboService(PiLivingServiceContext context) {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStatePlayerFacet;",
+                "@PiLivingFacet(namespace = \"example\", path = \"combo\")",
+                "public final class ComboService extends PiStatePlayerFacet<CounterState> {",
+                "  public ComboService(PiLivingFacetContext context) {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -1891,32 +1891,32 @@ class PiSyncModelProcessorTest {
     }
 
     @Test
-    void rejectsLivingServiceWithParameterizedInferredStateType() {
+    void rejectsLivingFacetWithParameterizedInferredStateType() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLivingService {",
+                "public @interface PiLivingFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLivingServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLivingFacetContext {",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLivingEntityService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLivingEntityService<S> {",
-                "  protected PiStateLivingEntityService(PiLivingServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLivingEntityFacet<S> {",
+                "  protected PiStateLivingEntityFacet(PiLivingFacetContext context) {",
                 "  }",
                 "}"
         );
@@ -1929,12 +1929,12 @@ class PiSyncModelProcessorTest {
         JavaFileObject service = JavaFileObjects.forSourceLines(
                 "example.ComboService",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLivingService;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLivingEntityService;",
-                "@PiLivingService(namespace = \"example\", path = \"combo\")",
-                "public final class ComboService extends PiStateLivingEntityService<ExampleState<String>> {",
-                "  public ComboService(PiLivingServiceContext context) {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet;",
+                "@PiLivingFacet(namespace = \"example\", path = \"combo\")",
+                "public final class ComboService extends PiStateLivingEntityFacet<ExampleState<String>> {",
+                "  public ComboService(PiLivingFacetContext context) {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -1946,55 +1946,55 @@ class PiSyncModelProcessorTest {
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-                "@PiLivingService types must resolve to a non-parameterized concrete state type"
+                "@PiLivingFacet types must resolve to a non-parameterized concrete state type"
         );
     }
 
     @Test
-    void rejectsNestedLivingServiceTypesBeforeCodeGeneration() {
+    void rejectsNestedLivingFacetTypesBeforeCodeGeneration() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLivingService {",
+                "public @interface PiLivingFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLivingServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLivingFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLivingServiceDescriptor<T> {",
+                "public interface PiLivingFacetDescriptor<T> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiGeneratedLivingServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.service;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLivingFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
                 "import net.minecraftforge.common.capabilities.Capability;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceDescriptor;",
-                "public abstract class PiGeneratedLivingServiceDescriptor<T, S> implements PiLivingServiceDescriptor<T> {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor;",
+                "public abstract class PiGeneratedLivingFacetDescriptor<T, S> implements PiLivingFacetDescriptor<T> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLivingServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLivingFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -2002,35 +2002,35 @@ class PiSyncModelProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  public Class<S> stateType() {",
                 "    return stateType;",
                 "  }",
                 "  public abstract Capability<T> capability();",
-                "  public abstract T create(PiLivingServiceContext context);",
+                "  public abstract T create(PiLivingFacetContext context);",
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceRegistry {",
-                "  void register(PiGeneratedLivingServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetRegistry {",
+                "  void register(PiGeneratedLivingFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceProvider {",
-                "  void register(PiLivingServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetProvider {",
+                "  void register(PiLivingFacetRegistry registry);",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLivingEntityService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLivingEntityService<S> {",
-                "  protected PiStateLivingEntityService(PiLivingServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLivingEntityFacet<S> {",
+                "  protected PiStateLivingEntityFacet(PiLivingFacetContext context) {",
                 "  }",
                 "}"
         );
@@ -2066,13 +2066,13 @@ class PiSyncModelProcessorTest {
         JavaFileObject service = JavaFileObjects.forSourceLines(
                 "example.OuterServices",
                 "package example;",
-                "import org.pickaid.pibrary.api.service.PiLivingService;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLivingEntityService;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet;",
                 "public final class OuterServices {",
-                "  @PiLivingService(namespace = \"example\", path = \"combo\")",
-                "  public static final class ComboService extends PiStateLivingEntityService<CounterState> {",
-                "    public ComboService(PiLivingServiceContext context) {",
+                "  @PiLivingFacet(namespace = \"example\", path = \"combo\")",
+                "  public static final class ComboService extends PiStateLivingEntityFacet<CounterState> {",
+                "    public ComboService(PiLivingFacetContext context) {",
                 "      super(context);",
                 "    }",
                 "  }",
@@ -2085,57 +2085,57 @@ class PiSyncModelProcessorTest {
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-                "@PiLivingService types must be top-level classes because generated companions are emitted as package-level types"
+                "@PiLivingFacet types must be top-level classes because generated companions are emitted as package-level types"
         );
     }
 
     @Test
-    void rejectsLivingServiceConstructorThatThrowsCheckedException() {
+    void rejectsLivingFacetConstructorThatThrowsCheckedException() {
         JavaFileObject annotation = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingService",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacet",
+                "package org.pickaid.pibrary.api.facet;",
                 "import java.lang.annotation.ElementType;",
                 "import java.lang.annotation.Retention;",
                 "import java.lang.annotation.RetentionPolicy;",
                 "import java.lang.annotation.Target;",
                 "@Retention(RetentionPolicy.SOURCE)",
                 "@Target(ElementType.TYPE)",
-                "public @interface PiLivingService {",
+                "public @interface PiLivingFacet {",
                 "  String namespace();",
                 "  String path();",
                 "}"
         );
         JavaFileObject context = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceContext",
-                "package org.pickaid.pibrary.api.service;",
-                "public final class PiLivingServiceContext {",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetContext",
+                "package org.pickaid.pibrary.api.facet;",
+                "public final class PiLivingFacetContext {",
                 "}"
         );
         JavaFileObject descriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiLivingServiceDescriptor",
-                "package org.pickaid.pibrary.api.service;",
+                "org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor",
+                "package org.pickaid.pibrary.api.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
-                "public interface PiLivingServiceDescriptor<T, S> {",
+                "public interface PiLivingFacetDescriptor<T, S> {",
                 "  ResourceLocation id();",
-                "  Class<T> serviceType();",
+                "  Class<T> facetClass();",
                 "  Class<S> stateType();",
-                "  T create(PiLivingServiceContext context);",
+                "  T create(PiLivingFacetContext context);",
                 "}"
         );
         JavaFileObject generatedDescriptor = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiGeneratedLivingServiceDescriptor",
-                "package org.pickaid.pibrary.runtime.service;",
+                "org.pickaid.pibrary.runtime.facet.PiGeneratedLivingFacetDescriptor",
+                "package org.pickaid.pibrary.runtime.facet;",
                 "import net.minecraft.resources.ResourceLocation;",
                 "import net.minecraftforge.common.capabilities.Capability;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceDescriptor;",
-                "public abstract class PiGeneratedLivingServiceDescriptor<T, S> implements PiLivingServiceDescriptor<T, S> {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetDescriptor;",
+                "public abstract class PiGeneratedLivingFacetDescriptor<T, S> implements PiLivingFacetDescriptor<T, S> {",
                 "  private final ResourceLocation id;",
-                "  private final Class<T> serviceType;",
+                "  private final Class<T> facetClass;",
                 "  private final Class<S> stateType;",
-                "  protected PiGeneratedLivingServiceDescriptor(ResourceLocation id, Class<T> serviceType, Class<S> stateType) {",
+                "  protected PiGeneratedLivingFacetDescriptor(ResourceLocation id, Class<T> facetClass, Class<S> stateType) {",
                 "    this.id = id;",
-                "    this.serviceType = serviceType;",
+                "    this.facetClass = facetClass;",
                 "    this.stateType = stateType;",
                 "  }",
                 "  @Override",
@@ -2143,36 +2143,36 @@ class PiSyncModelProcessorTest {
                 "    return id;",
                 "  }",
                 "  @Override",
-                "  public Class<T> serviceType() {",
-                "    return serviceType;",
+                "  public Class<T> facetClass() {",
+                "    return facetClass;",
                 "  }",
                 "  @Override",
                 "  public Class<S> stateType() {",
                 "    return stateType;",
                 "  }",
                 "  public abstract Capability<T> capability();",
-                "  public abstract T create(PiLivingServiceContext context);",
+                "  public abstract T create(PiLivingFacetContext context);",
                 "}"
         );
         JavaFileObject registry = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceRegistry",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceRegistry {",
-                "  void register(PiGeneratedLivingServiceDescriptor<?, ?> descriptor);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetRegistry",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetRegistry {",
+                "  void register(PiGeneratedLivingFacetDescriptor<?, ?> descriptor);",
                 "}"
         );
         JavaFileObject provider = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.runtime.service.PiLivingServiceProvider",
-                "package org.pickaid.pibrary.runtime.service;",
-                "public interface PiLivingServiceProvider {",
-                "  void register(PiLivingServiceRegistry registry);",
+                "org.pickaid.pibrary.runtime.facet.PiLivingFacetProvider",
+                "package org.pickaid.pibrary.runtime.facet;",
+                "public interface PiLivingFacetProvider {",
+                "  void register(PiLivingFacetRegistry registry);",
                 "}"
         );
         JavaFileObject base = JavaFileObjects.forSourceLines(
-                "org.pickaid.pibrary.api.service.PiStateLivingEntityService",
-                "package org.pickaid.pibrary.api.service;",
-                "public abstract class PiStateLivingEntityService<S> {",
-                "  protected PiStateLivingEntityService(PiLivingServiceContext context) {",
+                "org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet",
+                "package org.pickaid.pibrary.api.facet;",
+                "public abstract class PiStateLivingEntityFacet<S> {",
+                "  protected PiStateLivingEntityFacet(PiLivingFacetContext context) {",
                 "  }",
                 "}"
         );
@@ -2209,12 +2209,12 @@ class PiSyncModelProcessorTest {
                 "example.ComboService",
                 "package example;",
                 "import java.io.IOException;",
-                "import org.pickaid.pibrary.api.service.PiLivingService;",
-                "import org.pickaid.pibrary.api.service.PiLivingServiceContext;",
-                "import org.pickaid.pibrary.api.service.PiStateLivingEntityService;",
-                "@PiLivingService(namespace = \"example\", path = \"combo\")",
-                "public final class ComboService extends PiStateLivingEntityService<CounterState> {",
-                "  public ComboService(PiLivingServiceContext context) throws IOException {",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacet;",
+                "import org.pickaid.pibrary.api.facet.PiLivingFacetContext;",
+                "import org.pickaid.pibrary.api.facet.PiStateLivingEntityFacet;",
+                "@PiLivingFacet(namespace = \"example\", path = \"combo\")",
+                "public final class ComboService extends PiStateLivingEntityFacet<CounterState> {",
+                "  public ComboService(PiLivingFacetContext context) throws IOException {",
                 "    super(context);",
                 "  }",
                 "}"
@@ -2226,7 +2226,7 @@ class PiSyncModelProcessorTest {
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-                "@PiLivingService constructors accepting PiLivingServiceContext must not throw checked exceptions because generated descriptors instantiate services directly"
+                "@PiLivingFacet constructors accepting PiLivingFacetContext must not throw checked exceptions because generated descriptors instantiate facets directly"
         );
     }
 

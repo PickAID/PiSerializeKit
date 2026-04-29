@@ -1,9 +1,9 @@
 package org.pickaid.piserializekit.processor.model;
 
-public record PiLivingServiceSpec(
+public record PiLivingFacetSpec(
         String namespace,
         String path,
-        String serviceSimpleName,
+        String facetSimpleName,
         String stateQualifiedName,
         String stateSimpleName
 ) {

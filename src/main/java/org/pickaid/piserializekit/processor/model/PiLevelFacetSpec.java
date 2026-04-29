@@ -1,9 +1,9 @@
 package org.pickaid.piserializekit.processor.model;
 
-public record PiLevelServiceSpec(
+public record PiLevelFacetSpec(
         String namespace,
         String path,
-        String serviceSimpleName,
+        String facetSimpleName,
         String stateQualifiedName,
         String stateSimpleName
 ) {

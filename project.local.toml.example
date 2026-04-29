@@ -1,0 +1,26 @@
+# Copy this file to project.local.toml when you need machine-local settings.
+# project.local.toml is ignored by git. Do not put real tokens into project.toml.
+
+[run]
+# Optional local run identity.
+# Format: "PlayerName" or "PlayerName,uuid-without-dashes".
+mc_user = "DevPlayer,00000000000000000000000000000001"
+
+[build]
+# Optional local toggle for the version increment task.
+# Keep this false unless you intentionally want the build to rewrite
+# project.toml's mod.version value.
+formal_version = false
+
+[publish]
+# Optional local-only credential fallbacks.
+# Prefer environment variables for real CI/release usage:
+# MAVEN_URL, MAVEN_USER, MAVEN_PASSWORD, MODRINTH_TOKEN, CURSEFORGE_TOKEN.
+#
+# These are intentionally commented out. If you temporarily fill them in for a
+# local upload test, remove the values before sharing logs or screenshots.
+# maven_url = "https://maven.example.com/releases"
+# maven_user = ""
+# maven_password = ""
+# modrinth_token = ""
+# curseforge_token = ""

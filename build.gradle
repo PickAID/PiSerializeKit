@@ -23,14 +23,16 @@ plugins {
 }
 
 apply plugin: 'idea'
+apply plugin: 'java-library'
 apply plugin: 'maven-publish'
 apply plugin: "com.matthewprenger.cursegradle"
 apply plugin: 'org.spongepowered.mixin'
 apply from: 'gradle/template-config.gradle'
 
-def enabledFeatures = project.ext.enabledFeatures
 def templateRepositories = project.ext.templateRepositories
+def templateFeatureDependencies = project.ext.templateFeatureDependencies
 def templateDependencies = project.ext.templateDependencies
+def templateDevPackDependencies = project.ext.templateDevPackDependencies
 
 jarJar.enable()
 
@@ -164,74 +166,23 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
-    maven {
-        name = "Jared's maven"
-        url = "https://maven.blamejared.com/"
-        content {
-            includeGroupByRegex "mezz\\.jei.*"
-        }
-    }
-    maven {
-        name = 'tterrag'
-        url = 'https://maven.tterrag.com/'
-    }
-    maven {
-        name = 'GeckoLib'
-        url 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
-        content {
-            includeGroupByRegex("software\\.bernie.*")
-            includeGroup("com.eliotlash.mclib")
-        }
-    }
-    maven {
-        url = "https://maven.theillusivec4.top/"
-        content {
-            includeGroup "top.theillusivec4.curios"
-        }
-    }
-    maven {
-        name "KosmX's maven"
-        url 'https://maven.kosmx.dev/'
-    }
-    maven {
-        name = "Curseforge"
-        url = "https://cursemaven.com"
-        content {
-            includeGroup "curse.maven"
-        }
-    }
-    maven {
-        // Shedaniel's maven (Architectury API)
-        url = "https://maven.architectury.dev"
-        content {
-            includeGroup "dev.architectury"
-        }
-    }
-    maven {
-        name = "Lat's Maven"
-        url = "https://maven.latvian.dev/releases"
-        content {
-            includeGroup "dev.latvian.mods"
-            includeGroup "dev.latvian.apps"
-        }
-    }
-    maven {
-        url 'https://jitpack.io'
-        content {
-            includeGroup "com.github.rtyley"
-            includeGroup "com.github.llamalad7.mixinextras"
-        }
-    }
-    maven {
-        name = "Mihono's maven"
-        url = "https://maven.mihono.cn/repository/pickaid1201/"
-    }
-    templateRepositories.custom.each { repoName, repoUrl ->
+    def addConfiguredRepository = { Map<String, ?> repoSpec ->
         maven {
-            name = "project-${repoName}"
-            url = repoUrl
+            name = repoSpec.name
+            url = repoSpec.url
+            if (!repoSpec.groups.isEmpty() || !repoSpec.groupRegexes.isEmpty()) {
+                content {
+                    repoSpec.groups.each { includeGroup(it) }
+                    repoSpec.groupRegexes.each { includeGroupByRegex(it) }
+                }
+            }
         }
     }
+
+    mavenLocal()
+    (templateRepositories.builtin + templateRepositories.custom + templateRepositories.devPacks)
+            .unique { repoSpec -> repoSpec.url.toString() }
+            .each(addConfiguredRepository)
     flatDir { dirs "libraries/${config.mc_version}/all" }
     flatDir { dirs "libraries/${config.mc_version}/classpathOnly" }
     flatDir { dirs "libraries/${config.mc_version}/runtimeOnly" }
@@ -246,161 +197,23 @@ def createConfiguredDependency = { String notation, boolean transitive ->
 
 dependencies {
     minecraft "net.minecraftforge:forge:${config.mc_version}-${config.forge_version}"
-    if (enabledFeatures.mixin_extras) {
-        compileOnly(annotationProcessor("com.github.llamalad7.mixinextras:mixinextras-common:${config.mixin_extras_version}"))
-    }
     testAnnotationProcessor sourceSets.main.output
     testImplementation platform("org.junit:junit-bom:5.10.2")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    testImplementation "com.google.testing.compile:compile-testing:0.21.0"
 
-    compileOnly fg.deobf("com.tterrag.registrate:Registrate:${config.registrate_version}")
-    jarJar(group: 'com.tterrag.registrate', name: 'Registrate', version: "[MC1.20,MC1.21)")
+    (templateFeatureDependencies + templateDependencies + templateDevPackDependencies).each { dependencySpec ->
+        if (dependencySpec.configuration == "jarJar") {
+            jarJar(project.dependencies.create("${dependencySpec.group}:${dependencySpec.artifact}:${dependencySpec.range}") {
+                it.transitive = dependencySpec.transitive
+            })
+            return
+        }
 
-    if (enabledFeatures.jei) {
-        compileOnly fg.deobf("mezz.jei:jei-${config.mc_version}-common-api:${config.jei_version}")
-        compileOnly fg.deobf("mezz.jei:jei-${config.mc_version}-forge-api:${config.jei_version}")
-        runtimeOnly fg.deobf("mezz.jei:jei-${config.mc_version}-forge:${config.jei_version}")
-    }
-
-    if (enabledFeatures.geckolib) {
-        implementation fg.deobf("software.bernie.geckolib:geckolib-neoforge-${config.mc_version}:${config.geckolib_version}")
-        implementation("com.eliotlash.mclib:mclib:20")
-        jarJar(group: 'software.bernie.geckolib', name: "geckolib-neoforge-${config.mc_version}", version: "[${config.geckolib_version},)")
-    }
-
-    if (enabledFeatures.curios) {
-        compileOnly fg.deobf("top.theillusivec4.curios:curios-forge:${config.curios_version}")
-//        runtimeOnly fg.deobf("top.theillusivec4.curios:curios-forge:${config.curios_version}")
-    }
-
-    if (enabledFeatures.player_animator) {
-        implementation fg.deobf("dev.kosmx.player-anim:player-animation-lib-forge:${config.playeranimator_version}")
-        runtimeOnly fg.deobf("io.github.kosmx.bendy-lib:bendy-lib-forge:${config.bendylib_version}")
-    }
-
-    if (hasConfig("enable_annotation") && Boolean.parseBoolean(config.enable_annotation)) {
-        compileOnly(annotationProcessor("org.spongepowered:mixin:0.8.7:processor"))
-    }
-
-    // Mixin extra
-    if (enabledFeatures.mixin_extras) {
-        implementation fg.deobf("com.github.llamalad7.mixinextras:mixinextras-forge:${config.mixin_extras_version}")
-        jarJar(group: 'com.github.llamalad7.mixinextras', name: 'mixinextras-forge', version: "[${config.mixin_extras_version},)")
-    }
-
-    if (hasConfig("l2_library_version") && !config.l2_library_version.isEmpty()) {
-        implementation fg.deobf("dev.xkmc.l2library:l2library:${config.l2_library_version}")
-        jarJar(group: 'dev.xkmc', name: 'l2library', version: "[${config.l2_library_version},)")
-    }
-
-
-    // Libraries jarjar.
-
-    if (hasConfig("l2damagetracker_version") && !config.l2damagetracker_version.isEmpty()) {
-        implementation fg.deobf("dev.xkmc.l2damagetracker:l2damagetracker:${config.l2damagetracker_version}")
-        jarJar(group: 'dev.xkmc', name: 'l2damagetracker', version: "[${config.l2damagetracker_version},)")
-    }
-
-    if (hasConfig("l2serial_version") && !config.l2serial_version.isEmpty()) {
-        implementation fg.deobf("dev.xkmc.l2serial:l2serial:${config.l2serial_version}")
-        jarJar(group: 'dev.xkmc', name: 'l2serial', version: "[${config.l2serial_version},)")
-    }
-
-    if (hasConfig("pibrary_version") && !config.pibrary_version.isEmpty()) {
-        implementation fg.deobf("com.mihono.pickaid:pibrary:${config.pibrary_version}")
-        jarJar(group: 'com.mihono.pickaid', name: 'pibrary', version: "[${config.pibrary_version},)")
-    }
-
-    if (hasConfig("rpg_projects") && !config.rpg_projects.isEmpty()) {
-        // attribute fix
-        runtimeOnly fg.deobf("curse.maven:attributefix-280510:4648448")
-        // max health fix
-        runtimeOnly fg.deobf("curse.maven:max-health-fix-492246:4648479")
-        // dummy target
-        runtimeOnly fg.deobf("curse.maven:mmmmmmmmmmmm-225738:4602101")
-        runtimeOnly fg.deobf("curse.maven:selene-499980:4656567")
-        // apple skin
-        compileOnly fg.deobf("curse.maven:appleskin-248787:4605078")
-        runtimeOnly fg.deobf("curse.maven:appleskin-248787:4605078")
-    }
-
-    if (hasConfig("reference_projects") && !config.reference_projects.isEmpty()) {
-        compileOnly fg.deobf("curse.maven:forgeendertech-244844:6030567")
-        compileOnly fg.deobf("curse.maven:advanced-hook-launchers-244849:5829843")
-    }
-
-    templateDependencies.each { dependencySpec ->
         def baseDependency = createConfiguredDependency(dependencySpec.notation, dependencySpec.transitive)
         def resolvedDependency = dependencySpec.deobf ? fg.deobf(baseDependency) : baseDependency
         add(dependencySpec.configuration, resolvedDependency)
-
-        if (dependencySpec.range) {
-            jarJar(group: dependencySpec.group, name: dependencySpec.artifact, version: dependencySpec.range)
-        }
     }
-
-    def libraries = new File(file("libraries"), "${config.mc_version}")
-    if (!libraries.isDirectory()) libraries.mkdirs()
-
-    def libDir = new File(libraries, "all");
-    if (libDir.isDirectory()) {
-        libDir.eachFile { file ->
-            def splitPos = file.name.lastIndexOf("-")
-            def modartifact = file.name.substring(0, splitPos)
-            def modversion = file.name.substring(splitPos + 1, file.name.length() - 4)
-            dependencies {
-                implementation fg.deobf(project.dependencies.create("_all:$modartifact:$modversion") {
-                    transitive = false
-                })
-            }
-        }
-    } else libDir.mkdir();
-
-    libDir = new File(libraries, "classpathOnly");
-    if (libDir.isDirectory()) {
-        libDir.eachFile { file ->
-            def splitPos = file.name.lastIndexOf("-")
-            def modartifact = file.name.substring(0, splitPos)
-            def modversion = file.name.substring(splitPos + 1, file.name.length() - 4)
-            dependencies {
-                compileOnly fg.deobf(project.dependencies.create("_classpath:$modartifact:$modversion") {
-                    transitive = false
-                })
-            }
-        }
-    } else libDir.mkdir();
-
-    libDir = new File(libraries, "runtimeOnly");
-    if (libDir.isDirectory()) {
-        libDir.eachFile { file ->
-            def splitPos = file.name.lastIndexOf("-")
-            def modartifact = file.name.substring(0, splitPos)
-            def modversion = file.name.substring(splitPos + 1, file.name.length() - 4)
-            dependencies {
-                runtimeOnly fg.deobf(project.dependencies.create("_runtime:$modartifact:$modversion") {
-                    transitive = false
-                })
-            }
-        }
-    } else libDir.mkdir();
-
-    libDir = new File(file("libraries"), "embedded");
-    if (libDir.isDirectory()) {
-        libDir.eachFile { file ->
-            def splitPos = file.name.lastIndexOf("-")
-            def modartifact = file.name.substring(0, splitPos)
-            def modversion = file.name.substring(splitPos + 1, file.name.length() - 4)
-            def modreference = "lib:$modartifact:$modversion"
-
-            dependencies {
-                implementation project.dependencies.create(modreference) {
-                    transitive = false
-                }
-            }
-        }
-    } else libDir.mkdir();
 }
 
 tasks.withType(Test).configureEach {
@@ -410,12 +223,10 @@ tasks.withType(Test).configureEach {
 def resourceTargets = ['META-INF/mods.toml', 'pack.mcmeta']
 def replaceProperties = [
         minecraft_version: config.mc_version, minecraft_version_range: config.mc_range,
+        loader_version_range: config.forge_range,
         forge_version    : "${config.mc_version}-${config.forge_version}", forge_version_range: config.forge_range,
         mod_id           : config.mod_id, mod_name: config.mod_name, mod_license: config.mod_license, mod_version: config.mod_version,
         mod_authors      : config.mod_authors, mod_description: config.mod_description,
-        jei_version      : config.jei_version, curios_version: config.curios_version,
-        geckolib_version : config.geckolib_version, playeranimator_version: config.playeranimator_version,
-        citadel_version  : hasConfig("citadel_version") ? config.citadel_version : "",
         modrinth_project : config.modrinth_project,
         issue_tracker_url: config.issue_tracker_url, mod_credits: config.mod_credits
 ]
