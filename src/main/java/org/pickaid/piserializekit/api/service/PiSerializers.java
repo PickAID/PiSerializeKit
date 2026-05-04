@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -131,6 +132,82 @@ public final class PiSerializers {
     public static <T> PiSerializer<T> codecBacked(Codec<T> codec, PiPortablePacketCodec<T> packetCodec) {
         Objects.requireNonNull(packetCodec, "packetCodec");
         return of(codec, packetCodec);
+    }
+
+    public static <T> PiSerializer<T> resourceLocationBacked(
+            PiSerializeService service,
+            Function<ResourceLocation, T> factory,
+            Function<T, ResourceLocation> extractor
+    ) {
+        Objects.requireNonNull(service, "service");
+        return mapped(service.require(RESOURCE_LOCATION), factory, extractor);
+    }
+
+    public static <T> PiSerializer<T> stringBacked(
+            PiSerializeService service,
+            Function<String, T> factory,
+            Function<T, String> extractor
+    ) {
+        Objects.requireNonNull(service, "service");
+        return mapped(service.require(STRING), factory, extractor);
+    }
+
+    public static <S, T> PiSerializer<T> mapped(
+            PiSerializer<S> base,
+            Function<S, T> decoder,
+            Function<T, S> encoder
+    ) {
+        Objects.requireNonNull(base, "base");
+        Objects.requireNonNull(decoder, "decoder");
+        Objects.requireNonNull(encoder, "encoder");
+        PiNbtCodec<S> baseNbt = base.nbtCodec();
+        PiPacketCodec<S> basePacket = base.packetCodec();
+        return of(
+                base.valueCodec().xmap(decoder, encoder),
+                new PiNbtCodec<>() {
+                    @Override
+                    public CompoundTag encode(T value) {
+                        return baseNbt.encode(encoder.apply(value));
+                    }
+
+                    @Override
+                    public T decode(CompoundTag tag) {
+                        return decoder.apply(baseNbt.decode(tag));
+                    }
+
+                    @Override
+                    public T decodeInto(CompoundTag tag, T current) {
+                        return decode(tag);
+                    }
+
+                    @Override
+                    public Tag encodeTag(T value) {
+                        return baseNbt.encodeTag(encoder.apply(value));
+                    }
+
+                    @Override
+                    public T decodeTag(Tag tag) {
+                        return decoder.apply(baseNbt.decodeTag(tag));
+                    }
+
+                    @Override
+                    public T decodeIntoTag(Tag tag, T current) {
+                        return decodeTag(tag);
+                    }
+                },
+                new PiPacketCodec<>() {
+                    @Override
+                    public void write(PiPacketBuffer buffer, T value) {
+                        basePacket.write(buffer, encoder.apply(value));
+                    }
+
+                    @Override
+                    public T read(PiPacketBuffer buffer, PiDecodeContext context) {
+                        S decoded = basePacket.read(buffer, context);
+                        return decoded == null ? null : decoder.apply(decoded);
+                    }
+                }
+        );
     }
 
     public static <T extends Enum<T>> PiSerializer<T> enumType(Class<T> enumType) {
