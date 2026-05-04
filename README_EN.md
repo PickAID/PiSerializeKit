@@ -9,13 +9,15 @@ Use it when you need any of these:
 1. a typed state model that can be saved and synced;
 2. a packet with a stable id, version, and decode path;
 3. a reusable serializer for one Java type;
-4. direct runtime save/load helpers by type.
+4. direct runtime save/load helpers by type;
+5. field scanning for a record/action tree when you need recursive checks or path-based errors.
 
-Most day-to-day code only touches three layers:
+Most day-to-day code only touches these layers:
 
 1. annotations such as `@PiSyncModel`, `@PiField`, and `@PiPacket`;
 2. runtime entry points such as `PiSchemas`, `PiPackets`, and `PiSerializeServices`;
-3. serializer APIs such as `PiSerializer` and `PiSerializers`.
+3. serializer APIs such as `PiSerializer` and `PiSerializers`;
+4. object inspection through `PiObjectInspector`.
 
 You normally do not hand-reference `_PiSchema`, `_PiPacket`, or other generated companion names, and the low-level `binding.codec()` path should not be the first example most users see.
 
@@ -131,6 +133,64 @@ PiSerializeServices.withScope(runtime, () -> {
 
 That scoped override is useful for tests, isolated local overrides, and higher-level packs that need their own serializer policy.
 
+### 4. Inspect a record or action tree
+
+Some systems do not want to save data to NBT immediately. They first need to see the fields,
+children, and paths inside an object tree. Data graphs, spell actions, recipe layouts, and
+condition trees often need recursive validation with clear paths such as
+`$.actions[0].damage.amount`.
+
+```java
+record DamageStep(String id, @PiInspectRange(min = 0, max = 100) int amount) {
+}
+
+record SpellGraph(@PiInspectRequired String id, List<DamageStep> steps, @PiInspectIgnore String debugNote) {
+}
+
+PiObjectType<SpellGraph> type = PiObjectInspector.of(SpellGraph.class);
+List<String> fields = type.fields().stream()
+        .map(PiObjectField::name)
+        .toList();
+
+PiObjectInspector.walk(graph, visit -> {
+    System.out.println(visit.path() + " = " + visit.value());
+});
+```
+
+The default walker traverses records, lists, maps, and arrays. Plain Java objects are treated as
+leaves by default so entity, level, and other large runtime objects do not get expanded by accident.
+Enable plain object traversal only when you really want it:
+
+```java
+PiObjectWalkOptions options = PiObjectWalkOptions.builder()
+        .traversePlainObjects(true)
+        .fieldFilter(field -> !field.isTransient())
+        .build();
+
+PiObjectInspector.walk(root, options, visitor);
+```
+
+For config, data graph, or action tree validation, the verifier path is usually more direct:
+
+```java
+PiObjectVerifier verifier = PiObjectVerifier.of(
+        PiInspectionRules.inspectAnnotations(),
+        PiInspectionRules.requireVisitedPath("$.steps[0].id", "at least one step is required")
+);
+
+PiInspectionResult result = verifier.verify(graph);
+if (result.hasFatal()) {
+    throw new IllegalArgumentException(result.authorSummary());
+}
+```
+
+The lightweight annotations are:
+
+1. `@PiInspectRequired`: the field or record component cannot be `null`
+2. `@PiInspectRange`: numeric range validation
+3. `@PiInspectIgnore`: skip this field during default traversal
+4. `@PiInspectLeaf`: visit this value but do not expand its internal fields
+
 ## Drop lower only when needed
 
 These are the main entry points used most of the time:
@@ -139,9 +199,11 @@ These are the main entry points used most of the time:
 2. `org.pickaid.piserializekit.api.packet.*`
 3. `org.pickaid.piserializekit.api.service.*`
 4. `org.pickaid.piserializekit.api.runtime.*`
-5. `PiSchemas`
-6. `PiPackets`
-7. `PiSerializeServices`
+5. `org.pickaid.piserializekit.api.inspect.*`
+6. `PiSchemas`
+7. `PiPackets`
+8. `PiSerializeServices`
+9. `PiObjectInspector`
 
 If you need more control, the next layer down is:
 

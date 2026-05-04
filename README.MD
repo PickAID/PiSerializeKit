@@ -9,13 +9,15 @@
 1. 给一个状态类写持久化和同步结构；
 2. 给一个 packet 写稳定 id、版本和 decode 逻辑；
 3. 给某个类型提供统一 serializer；
-4. 在运行时直接按类型保存、读取状态或 packet。
+4. 在运行时直接按类型保存、读取状态或 packet；
+5. 扫一个 record/action tree 的字段，做递归校验或路径化报错。
 
-平时常用的只有三层东西：
+平时常用的只有这几层东西：
 
 1. 注解：`@PiSyncModel`、`@PiField`、`@PiPacket`
 2. 运行时入口：`PiSchemas`、`PiPackets`、`PiSerializeServices`
 3. 少量 serializer API：`PiSerializer`、`PiSerializers`
+4. 对象结构检查：`PiObjectInspector`
 
 你通常不需要手写或直接依赖 `_PiSchema`、`_PiPacket` 这类 generated class，也不该把 `binding.codec()` 当作第一层日常用法。
 
@@ -131,6 +133,59 @@ PiSerializeServices.withScope(runtime, () -> {
 
 这个 scoped override 很适合测试、局部覆盖或上层 pack 做隔离策略。
 
+### 4. 扫 record 或 action tree
+
+有些系统不是要立刻保存成 NBT，而是要先看清一个对象树里有哪些字段、子节点和路径。比如数据图、技能动作、配方布局、条件树这类结构，通常需要递归校验并给出 `$.actions[0].damage.amount` 这种明确路径。
+
+```java
+record DamageStep(String id, @PiInspectRange(min = 0, max = 100) int amount) {
+}
+
+record SpellGraph(@PiInspectRequired String id, List<DamageStep> steps, @PiInspectIgnore String debugNote) {
+}
+
+PiObjectType<SpellGraph> type = PiObjectInspector.of(SpellGraph.class);
+List<String> fields = type.fields().stream()
+        .map(PiObjectField::name)
+        .toList();
+
+PiObjectInspector.walk(graph, visit -> {
+    System.out.println(visit.path() + " = " + visit.value());
+});
+```
+
+默认会递归 record、list、map 和 array。普通 Java 对象默认只当作叶子，避免把 entity、level 这类运行时大对象整棵扫进去。确实需要扫普通对象时再打开：
+
+```java
+PiObjectWalkOptions options = PiObjectWalkOptions.builder()
+        .traversePlainObjects(true)
+        .fieldFilter(field -> !field.isTransient())
+        .build();
+
+PiObjectInspector.walk(root, options, visitor);
+```
+
+如果你要做配置、数据图或 action tree 的校验，用 verifier 会更直接：
+
+```java
+PiObjectVerifier verifier = PiObjectVerifier.of(
+        PiInspectionRules.inspectAnnotations(),
+        PiInspectionRules.requireVisitedPath("$.steps[0].id", "at least one step is required")
+);
+
+PiInspectionResult result = verifier.verify(graph);
+if (result.hasFatal()) {
+    throw new IllegalArgumentException(result.authorSummary());
+}
+```
+
+常用的轻量标注有：
+
+1. `@PiInspectRequired`：字段或 record component 不能是 `null`
+2. `@PiInspectRange`：数字范围校验
+3. `@PiInspectIgnore`：默认遍历时跳过这个字段
+4. `@PiInspectLeaf`：访问这个值，但不继续展开它的内部字段
+
 ## 更底层时再用这些 API
 
 平时常用入口主要是这些：
@@ -139,9 +194,11 @@ PiSerializeServices.withScope(runtime, () -> {
 2. `org.pickaid.piserializekit.api.packet.*`
 3. `org.pickaid.piserializekit.api.service.*`
 4. `org.pickaid.piserializekit.api.runtime.*`
-5. `PiSchemas`
-6. `PiPackets`
-7. `PiSerializeServices`
+5. `org.pickaid.piserializekit.api.inspect.*`
+6. `PiSchemas`
+7. `PiPackets`
+8. `PiSerializeServices`
+9. `PiObjectInspector`
 
 如果你需要更多控制，再下到：
 
