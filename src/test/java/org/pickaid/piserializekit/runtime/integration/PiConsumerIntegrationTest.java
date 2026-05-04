@@ -24,9 +24,9 @@ import org.pickaid.piserializekit.runtime.service.PiSerializeRuntime;
 
 class PiConsumerIntegrationTest {
     private static final ResourceLocation GENERATED_COMPLEX_STATE_ID =
-            ResourceLocation.fromNamespaceAndPath("test", "generated_complex_state");
+            new ResourceLocation("test", "generated_complex_state");
     private static final ResourceLocation TEST_NOTICE_PACKET_ID =
-            ResourceLocation.fromNamespaceAndPath("test", "test_notice");
+            new ResourceLocation("test", "test_notice");
 
     @Test
     void consumerResolvesGeneratedBindingsByAuthoredTypeAndStableId() {

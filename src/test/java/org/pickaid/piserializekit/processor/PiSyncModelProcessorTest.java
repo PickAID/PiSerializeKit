@@ -402,7 +402,7 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final int FIELD_COUNT = 2;");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final String SCHEMA_ID = \"example:trial_state\";");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public ResourceLocation schemaId()");
-        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return ResourceLocation.fromNamespaceAndPath(\"example\", \"trial_state\");");
+        assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return new ResourceLocation(\"example\", \"trial_state\");");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public int version()");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "return VERSION;");
         assertGeneratedContains(compilation, "example.TrialState_PiSchema", "public static final PiStateBinding<TrialState> BINDING = new PiStateBinding<>() {");
@@ -461,7 +461,7 @@ class PiSyncModelProcessorTest {
                 "  @PiField(id = \"run_id\", sync = PiSyncScope.TRACKING, persist = true)",
                 "  public UUID runId = new UUID(1L, 2L);",
                 "  @PiField(id = \"trial\", sync = PiSyncScope.TRACKING, persist = true)",
-                "  public ResourceLocation trial = ResourceLocation.parse(\"example:trial\");",
+                "  public ResourceLocation trial = new ResourceLocation(\"example:trial\");",
                 "}"
         );
 
@@ -1723,7 +1723,7 @@ class PiSyncModelProcessorTest {
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "extends PiGeneratedLivingFacetDescriptor<ComboService, CounterState>");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "private static final class CapabilityHolder {");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "private static final Capability<ComboService> VALUE = CapabilityManager.get(new CapabilityToken<>()");
-        assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "super(ResourceLocation.fromNamespaceAndPath(\"example\", \"combo\"), ComboService.class, CounterState.class);");
+        assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "super(new ResourceLocation(\"example\", \"combo\"), ComboService.class, CounterState.class);");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "return CapabilityHolder.VALUE;");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingDescriptor", "return new ComboService(context);");
         assertGeneratedContains(compilation, "example.ComboService_PiLivingProvider", "implements PiLivingFacetProvider");

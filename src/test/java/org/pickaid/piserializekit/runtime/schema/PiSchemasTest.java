@@ -69,7 +69,7 @@ class PiSchemasTest {
     void findsBindingsByTypeAndSchemaIdThroughServiceLoader() {
         assertTrue(PiSchemas.find(TestSchemaProvider.TestState.class).isPresent());
         assertTrue(PiSchemas.find(TestSchemaProvider.SCHEMA_ID).isPresent());
-        assertTrue(PiSchemas.find(ResourceLocation.fromNamespaceAndPath("test", "missing")).isEmpty());
+        assertTrue(PiSchemas.find(new ResourceLocation("test", "missing")).isEmpty());
     }
 
     @Test
@@ -162,7 +162,7 @@ class PiSchemasTest {
 
         PiRuntimeLookupException exception = assertThrows(
                 PiRuntimeLookupException.class,
-                () -> registry.require(ResourceLocation.fromNamespaceAndPath("test", "missing"))
+                () -> registry.require(new ResourceLocation("test", "missing"))
         );
 
         assertEquals(
@@ -430,7 +430,7 @@ class PiSchemasTest {
     private static final class DuplicateTypeBinding implements PiStateBinding<TestSchemaProvider.TestState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "duplicate_type");
+            return new ResourceLocation("test", "duplicate_type");
         }
 
         @Override
@@ -541,7 +541,7 @@ class PiSchemasTest {
     private static final class NullNewStateBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_new_state_binding");
+            return new ResourceLocation("test", "null_new_state_binding");
         }
 
         @Override
@@ -592,7 +592,7 @@ class PiSchemasTest {
     private static final class WrongNewStateTypeBinding implements PiStateBinding {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "wrong_new_state_type_binding");
+            return new ResourceLocation("test", "wrong_new_state_type_binding");
         }
 
         @Override
@@ -642,7 +642,7 @@ class PiSchemasTest {
     private static final class ThrowingNewStateBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "throwing_new_state_binding");
+            return new ResourceLocation("test", "throwing_new_state_binding");
         }
 
         @Override
@@ -694,7 +694,7 @@ class PiSchemasTest {
 
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "shared_new_state_binding");
+            return new ResourceLocation("test", "shared_new_state_binding");
         }
 
         @Override
@@ -745,7 +745,7 @@ class PiSchemasTest {
     private static final class InvalidSchemaVersionBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "invalid_schema_version");
+            return new ResourceLocation("test", "invalid_schema_version");
         }
 
         @Override
@@ -795,7 +795,7 @@ class PiSchemasTest {
     private static final class InvalidSchemaFieldsBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "invalid_schema_fields");
+            return new ResourceLocation("test", "invalid_schema_fields");
         }
 
         @Override
@@ -845,7 +845,7 @@ class PiSchemasTest {
     private static final class InvalidSchemaMigrationsBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "invalid_schema_migrations");
+            return new ResourceLocation("test", "invalid_schema_migrations");
         }
 
         @Override
@@ -900,7 +900,7 @@ class PiSchemasTest {
     private static final class ReservedSchemaFieldsBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "reserved_schema_fields");
+            return new ResourceLocation("test", "reserved_schema_fields");
         }
 
         @Override
@@ -950,7 +950,7 @@ class PiSchemasTest {
     private static final class SparseSchemaFieldsBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "sparse_schema_fields");
+            return new ResourceLocation("test", "sparse_schema_fields");
         }
 
         @Override
@@ -1003,7 +1003,7 @@ class PiSchemasTest {
     private static final class NullStateTypeBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_state_type");
+            return new ResourceLocation("test", "null_state_type");
         }
 
         @Override
@@ -1103,7 +1103,7 @@ class PiSchemasTest {
     private static final class NullSchemaFieldsBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_schema_fields");
+            return new ResourceLocation("test", "null_schema_fields");
         }
 
         @Override
@@ -1153,7 +1153,7 @@ class PiSchemasTest {
     private static final class NullSchemaMigrationsBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_schema_migrations");
+            return new ResourceLocation("test", "null_schema_migrations");
         }
 
         @Override
@@ -1208,7 +1208,7 @@ class PiSchemasTest {
     private static final class NullSchemaFieldEntryBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_schema_field_entry");
+            return new ResourceLocation("test", "null_schema_field_entry");
         }
 
         @Override
@@ -1258,7 +1258,7 @@ class PiSchemasTest {
     private static final class NullSchemaMigrationEntryBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_schema_migration_entry");
+            return new ResourceLocation("test", "null_schema_migration_entry");
         }
 
         @Override
@@ -1313,7 +1313,7 @@ class PiSchemasTest {
     private static final class AbstractStateBinding implements PiStateBinding<AbstractState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "abstract_state_binding");
+            return new ResourceLocation("test", "abstract_state_binding");
         }
 
         @Override
@@ -1363,7 +1363,7 @@ class PiSchemasTest {
     private static final class IncompleteSchemaMigrationsBinding implements PiStateBinding<OtherState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "incomplete_schema_migrations");
+            return new ResourceLocation("test", "incomplete_schema_migrations");
         }
 
         @Override

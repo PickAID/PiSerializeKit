@@ -45,7 +45,7 @@ public final class PiProcessorChunkFacetGenerationSupport {
                 writer.write("        });\n");
                 writer.write("    }\n\n");
                 writer.write("    public " + target.simpleName() + "() {\n");
-                writer.write("        super(ResourceLocation.fromNamespaceAndPath(\"" + spec.namespace() + "\", \"" + spec.path() + "\"), "
+                writer.write("        super(new ResourceLocation(\"" + spec.namespace() + "\", \"" + spec.path() + "\"), "
                         + spec.facetSimpleName() + ".class, " + spec.stateSimpleName() + ".class);\n");
                 writer.write("    }\n\n");
                 writer.write("    @Override\n");

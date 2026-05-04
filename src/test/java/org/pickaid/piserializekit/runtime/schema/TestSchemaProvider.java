@@ -16,7 +16,7 @@ import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;
 public final class TestSchemaProvider implements PiSchemaProvider {
     public static final PiFieldKey VALUE = new PiFieldKey(0, "value");
     public static final PiFieldDescriptor VALUE_FIELD = new PiFieldDescriptor(VALUE, PiSyncScope.CHUNK, true);
-    public static final ResourceLocation SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "schema_provider_state");
+    public static final ResourceLocation SCHEMA_ID = new ResourceLocation("test", "schema_provider_state");
     public static final String SCHEMA_ID_STRING = SCHEMA_ID.toString();
     public static final int SCHEMA_VERSION = 1;
 

@@ -55,9 +55,9 @@ class PiPacketsTest {
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         TestNoticePacket source = new TestNoticePacket("alert", List.of("alpha", "beta"));
 
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), source.packetId());
+        assertEquals(new ResourceLocation("test", "test_notice"), source.packetId());
         assertEquals(1, source.version());
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), PiPackets.packetId(TestNoticePacket.class));
+        assertEquals(new ResourceLocation("test", "test_notice"), PiPackets.packetId(TestNoticePacket.class));
         assertEquals(1, PiPackets.version(TestNoticePacket.class));
 
         source.write(buffer);
@@ -71,9 +71,9 @@ class PiPacketsTest {
     void packetBindingsLoadByTypeAndPacketId() {
         PiPacketBinding<TestNoticePacket> binding = PiPackets.require(TestNoticePacket.class);
 
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), binding.packetId());
-        assertSame(binding, PiPackets.require(ResourceLocation.fromNamespaceAndPath("test", "test_notice")));
-        assertTrue(PiPackets.packetIds().contains(ResourceLocation.fromNamespaceAndPath("test", "test_notice")));
+        assertEquals(new ResourceLocation("test", "test_notice"), binding.packetId());
+        assertSame(binding, PiPackets.require(new ResourceLocation("test", "test_notice")));
+        assertTrue(PiPackets.packetIds().contains(new ResourceLocation("test", "test_notice")));
         assertTrue(PiPackets.packetTypes().contains(TestNoticePacket.class));
     }
 
@@ -82,7 +82,7 @@ class PiPacketsTest {
         PiPacketRegistry registry = newRegistry();
         registry.register(TestNoticePacket.class, PiPackets.require(TestNoticePacket.class));
 
-        assertEquals(List.of(ResourceLocation.fromNamespaceAndPath("test", "test_notice")), registry.packetIds());
+        assertEquals(List.of(new ResourceLocation("test", "test_notice")), registry.packetIds());
         assertEquals(List.of(TestNoticePacket.class), registry.packetTypes());
     }
 
@@ -166,7 +166,7 @@ class PiPacketsTest {
 
         PiRuntimeLookupException exception = assertThrows(
                 PiRuntimeLookupException.class,
-                () -> registry.require(ResourceLocation.fromNamespaceAndPath("test", "missing"))
+                () -> registry.require(new ResourceLocation("test", "missing"))
         );
 
         assertEquals(
@@ -221,7 +221,7 @@ class PiPacketsTest {
 
         PiPacketDecodeException exception = assertThrows(PiPacketDecodeException.class, () -> binding.codec().read(buffer));
 
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), exception.packetId());
+        assertEquals(new ResourceLocation("test", "test_notice"), exception.packetId());
         assertTrue(exception.result().hasFatal());
     }
 
@@ -249,7 +249,7 @@ class PiPacketsTest {
 
         PiPacketDecodeException exception = assertThrows(PiPacketDecodeException.class, () -> binding.codec().read(buffer));
 
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "throwing_notice"), exception.packetId());
+        assertEquals(new ResourceLocation("test", "throwing_notice"), exception.packetId());
         assertTrue(exception.result().hasFatal());
         assertEquals("title", exception.result().issues().get(0).path());
         assertEquals(PiDecodeIssueCode.SERIALIZER_FAILURE, exception.result().issues().get(0).code());
@@ -265,7 +265,7 @@ class PiPacketsTest {
 
         PiPacketDecodeException exception = assertThrows(PiPacketDecodeException.class, () -> binding.codec().read(buffer));
 
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "throwing_ctor"), exception.packetId());
+        assertEquals(new ResourceLocation("test", "throwing_ctor"), exception.packetId());
         assertTrue(exception.result().hasFatal());
         assertEquals("$", exception.result().issues().get(0).path());
         assertEquals(PiDecodeIssueCode.SERIALIZER_FAILURE, exception.result().issues().get(0).code());
@@ -620,7 +620,7 @@ class PiPacketsTest {
     private static final class DuplicatePacketTypeBinding implements PiPacketBinding<TestNoticePacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "duplicate_packet_type");
+            return new ResourceLocation("test", "duplicate_packet_type");
         }
 
         @Override
@@ -653,7 +653,7 @@ class PiPacketsTest {
     private static final class DuplicatePacketIdBinding implements PiPacketBinding<OtherPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "test_notice");
+            return new ResourceLocation("test", "test_notice");
         }
 
         @Override
@@ -711,7 +711,7 @@ class PiPacketsTest {
     private static final class InvalidPacketVersionBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "invalid_packet_version");
+            return new ResourceLocation("test", "invalid_packet_version");
         }
 
         @Override
@@ -744,7 +744,7 @@ class PiPacketsTest {
     private static final class WrongDirectionServerPacketBinding implements PiPacketBinding<DirectionMismatchServerPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "wrong_direction_server_packet");
+            return new ResourceLocation("test", "wrong_direction_server_packet");
         }
 
         @Override
@@ -777,7 +777,7 @@ class PiPacketsTest {
     private static final class WrongDirectionClientPacketBinding implements PiPacketBinding<DirectionMismatchClientPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "wrong_direction_client_packet");
+            return new ResourceLocation("test", "wrong_direction_client_packet");
         }
 
         @Override
@@ -810,7 +810,7 @@ class PiPacketsTest {
     private static final class WrongDirectionBidirectionalPacketBinding implements PiPacketBinding<DirectionMismatchBidirectionalPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "wrong_direction_bidirectional_packet");
+            return new ResourceLocation("test", "wrong_direction_bidirectional_packet");
         }
 
         @Override
@@ -843,7 +843,7 @@ class PiPacketsTest {
     private static final class InvalidPacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "invalid_packet_fields");
+            return new ResourceLocation("test", "invalid_packet_fields");
         }
 
         @Override
@@ -876,7 +876,7 @@ class PiPacketsTest {
     private static final class InvalidPacketMigrationsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "invalid_packet_migrations");
+            return new ResourceLocation("test", "invalid_packet_migrations");
         }
 
         @Override
@@ -917,7 +917,7 @@ class PiPacketsTest {
     private static final class ReservedPacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "reserved_packet_fields");
+            return new ResourceLocation("test", "reserved_packet_fields");
         }
 
         @Override
@@ -950,7 +950,7 @@ class PiPacketsTest {
     private static final class SparsePacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "sparse_packet_fields");
+            return new ResourceLocation("test", "sparse_packet_fields");
         }
 
         @Override
@@ -983,7 +983,7 @@ class PiPacketsTest {
     private static final class NullPacketTypeBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_packet_type");
+            return new ResourceLocation("test", "null_packet_type");
         }
 
         @Override
@@ -1049,7 +1049,7 @@ class PiPacketsTest {
     private static final class NullPacketDirectionBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_packet_direction");
+            return new ResourceLocation("test", "null_packet_direction");
         }
 
         @Override
@@ -1082,7 +1082,7 @@ class PiPacketsTest {
     private static final class NullPacketCodecBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_packet_codec");
+            return new ResourceLocation("test", "null_packet_codec");
         }
 
         @Override
@@ -1115,7 +1115,7 @@ class PiPacketsTest {
     private static final class NullPacketFieldsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_packet_fields");
+            return new ResourceLocation("test", "null_packet_fields");
         }
 
         @Override
@@ -1148,7 +1148,7 @@ class PiPacketsTest {
     private static final class NullPacketMigrationsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_packet_migrations");
+            return new ResourceLocation("test", "null_packet_migrations");
         }
 
         @Override
@@ -1186,7 +1186,7 @@ class PiPacketsTest {
     private static final class NullPacketFieldEntryBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_packet_field_entry");
+            return new ResourceLocation("test", "null_packet_field_entry");
         }
 
         @Override
@@ -1219,7 +1219,7 @@ class PiPacketsTest {
     private static final class NullPacketMigrationEntryBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "null_packet_migration_entry");
+            return new ResourceLocation("test", "null_packet_migration_entry");
         }
 
         @Override
@@ -1257,7 +1257,7 @@ class PiPacketsTest {
     private static final class AbstractPacketBinding implements PiPacketBinding<AbstractPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "abstract_packet_binding");
+            return new ResourceLocation("test", "abstract_packet_binding");
         }
 
         @Override
@@ -1299,7 +1299,7 @@ class PiPacketsTest {
     private static final class IncompletePacketMigrationsBinding implements PiPacketBinding<InvalidPacket> {
         @Override
         public ResourceLocation packetId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "incomplete_packet_migrations");
+            return new ResourceLocation("test", "incomplete_packet_migrations");
         }
 
         @Override

@@ -105,7 +105,7 @@ class PiPacketProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.CastSkillRequest_PiPacket",
-                "public static final ResourceLocation PACKET_ID = ResourceLocation.fromNamespaceAndPath(\"example\", \"cast_skill\");"
+                "public static final ResourceLocation PACKET_ID = new ResourceLocation(\"example\", \"cast_skill\");"
         );
         assertGeneratedContains(
                 compilation,
@@ -140,7 +140,7 @@ class PiPacketProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.CastSkillRequest_PiPacket",
-                "net.minecraft.resources.ResourceLocation __pi_raw_skillId = PiPacketSupport.readIncomingField(buffer, SKILL_ID.id(), SKILL_ID_SERIALIZER, context, legacy, ResourceLocation.fromNamespaceAndPath(\"minecraft\", \"empty\"));"
+                "net.minecraft.resources.ResourceLocation __pi_raw_skillId = PiPacketSupport.readIncomingField(buffer, SKILL_ID.id(), SKILL_ID_SERIALIZER, context, legacy, new ResourceLocation(\"minecraft\", \"empty\"));"
         );
         assertGeneratedContains(
                 compilation,
@@ -207,7 +207,7 @@ class PiPacketProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.ShowToastToClientPacket_PiPacket",
-                "public static final ResourceLocation PACKET_ID = ResourceLocation.fromNamespaceAndPath(\"example\", \"show_toast\");"
+                "public static final ResourceLocation PACKET_ID = new ResourceLocation(\"example\", \"show_toast\");"
         );
     }
 
@@ -239,7 +239,7 @@ class PiPacketProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.CastSkillToServerPayload_PiPacket",
-                "public static final ResourceLocation PACKET_ID = ResourceLocation.fromNamespaceAndPath(\"example\", \"cast_skill\");"
+                "public static final ResourceLocation PACKET_ID = new ResourceLocation(\"example\", \"cast_skill\");"
         );
     }
 
@@ -270,7 +270,7 @@ class PiPacketProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.OpenMenuToClient_PiPacket",
-                "public static final ResourceLocation PACKET_ID = ResourceLocation.fromNamespaceAndPath(\"demo\", \"open_menu\");"
+                "public static final ResourceLocation PACKET_ID = new ResourceLocation(\"demo\", \"open_menu\");"
         );
         assertGeneratedContains(
                 compilation,

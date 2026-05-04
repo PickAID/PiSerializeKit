@@ -94,7 +94,7 @@ public final class PiResourceLocationConverter implements PiValueConverter<Resou
         if (!pathPrefix.isEmpty() && !path.startsWith(pathPrefix + "/")) {
             path = pathPrefix + "/" + path;
         }
-        return ResourceLocation.fromNamespaceAndPath(value.getNamespace(), path);
+        return new ResourceLocation(value.getNamespace(), path);
     }
 
     private ResourceLocation parseText(String value, PiConversionContext context) {

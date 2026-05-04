@@ -251,7 +251,7 @@ public final class PiProcessorSchemaGenerationSupport {
         writer.write("    public static final PiStateBinding<" + typeName + "> BINDING = new PiStateBinding<>() {\n");
         writer.write("        @Override\n");
         writer.write("        public ResourceLocation schemaId() {\n");
-        writer.write("            return ResourceLocation.fromNamespaceAndPath(\"" + schemaIdentity.namespace() + "\", \"" + schemaIdentity.path() + "\");\n");
+        writer.write("            return new ResourceLocation(\"" + schemaIdentity.namespace() + "\", \"" + schemaIdentity.path() + "\");\n");
         writer.write("        }\n\n");
         writer.write("        @Override\n");
         writer.write("        public String schemaIdString() {\n");

@@ -147,7 +147,7 @@ class PiPacketBufferCapabilityTest {
 
         @Override
         public net.minecraft.resources.ResourceLocation readResourceLocation() {
-            return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("test", "value");
+            return new net.minecraft.resources.ResourceLocation("test", "value");
         }
 
         @Override

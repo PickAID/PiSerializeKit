@@ -42,7 +42,7 @@ import org.pickaid.piserializekit.runtime.service.PiSerializeRuntime;
 class PiSchemaRuntimeTest {
     private static final PiFieldKey PLAYERS = new PiFieldKey(0, "players");
     private static final PiFieldKey COST = new PiFieldKey(1, "cost");
-    private static final ResourceLocation SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "trial_state");
+    private static final ResourceLocation SCHEMA_ID = new ResourceLocation("test", "trial_state");
     private static final int VERSION = 3;
     private static final PiSerializeRuntime RUNTIME = createRuntime();
     private static final PiSchemaField<List<String>> PLAYERS_FIELD = new PiSchemaField<>(
@@ -55,7 +55,7 @@ class PiSchemaRuntimeTest {
     );
     private static final PiFieldKey LEGACY_VALUE = new PiFieldKey(2, "value");
     private static final PiFieldKey LEGACY_LABEL = new PiFieldKey(3, "label");
-    private static final ResourceLocation LEGACY_SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "legacy_state");
+    private static final ResourceLocation LEGACY_SCHEMA_ID = new ResourceLocation("test", "legacy_state");
     private static final int LEGACY_VERSION = 3;
     private static final PiSchemaField<Integer> LEGACY_VALUE_FIELD = new PiSchemaField<>(
             new PiFieldDescriptor(LEGACY_VALUE, PiSyncScope.TRACKING, true),
@@ -67,7 +67,7 @@ class PiSchemaRuntimeTest {
     );
     private static final PiFieldKey CHECKPOINTS = new PiFieldKey(4, "checkpoints");
     private static final PiFieldKey MENU_PAGE = new PiFieldKey(5, "menu_page");
-    private static final ResourceLocation MANUAL_PERSISTED_SCHEMA_ID = ResourceLocation.fromNamespaceAndPath("test", "manual_persisted_state");
+    private static final ResourceLocation MANUAL_PERSISTED_SCHEMA_ID = new ResourceLocation("test", "manual_persisted_state");
     private static final int MANUAL_PERSISTED_VERSION = 1;
     private static final PiSchemaField<Set<String>> CHECKPOINTS_FIELD = new PiSchemaField<>(
             new PiFieldDescriptor(CHECKPOINTS, PiSyncScope.TRACKING, true),
@@ -464,7 +464,7 @@ class PiSchemaRuntimeTest {
     @Test
     void scalarHelpersRoundTripBooleanStringUuidAndResourceLocation() {
         UUID runId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
-        ResourceLocation location = ResourceLocation.parse("test:trial");
+        ResourceLocation location = new ResourceLocation("test:trial");
         CompoundTag tag = PiSchemaSupport.tagOf(
                 PiSchemaSupport.putBoolean("active", true),
                 PiSchemaSupport.putString("title", "boss"),
@@ -476,7 +476,7 @@ class PiSchemaRuntimeTest {
         assertTrue(PiSchemaSupport.getBoolean(tag, "active", context, false));
         assertEquals("boss", PiSchemaSupport.getString(tag, "title", context, "fallback"));
         assertEquals(runId, PiSchemaSupport.getUUID(tag, "run_id", context, new UUID(0L, 0L)));
-        assertEquals(location, PiSchemaSupport.getResourceLocation(tag, "trial", context, ResourceLocation.parse("test:fallback")));
+        assertEquals(location, PiSchemaSupport.getResourceLocation(tag, "trial", context, new ResourceLocation("test:fallback")));
         assertTrue(context.result().issues().isEmpty());
     }
 
@@ -488,7 +488,7 @@ class PiSchemaRuntimeTest {
         tag.putString("trial", "bad id");
         PiDecodeContext context = PiDecodeContext.strict();
         UUID fallbackUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174001");
-        ResourceLocation fallbackLocation = ResourceLocation.parse("test:fallback");
+        ResourceLocation fallbackLocation = new ResourceLocation("test:fallback");
 
         assertTrue(PiSchemaSupport.getBoolean(tag, "active", context, true));
         assertEquals("fallback", PiSchemaSupport.getString(tag, "title", context, "fallback"));
@@ -510,7 +510,7 @@ class PiSchemaRuntimeTest {
     @Test
     void serializerBackedFieldHelpersRoundTripScalarTypes() {
         UUID runId = UUID.fromString("123e4567-e89b-12d3-a456-426614174010");
-        ResourceLocation location = ResourceLocation.parse("test:trial");
+        ResourceLocation location = new ResourceLocation("test:trial");
         CompoundTag tag = PiSchemaSupport.tagOf(
                 PiSchemaSupport.putField("active", PiSerializers.BOOLEAN, true),
                 PiSchemaSupport.putField("title", PiSerializers.STRING, "boss"),
@@ -529,7 +529,7 @@ class PiSchemaRuntimeTest {
                         "trial",
                         PiSerializers.RESOURCE_LOCATION,
                         context,
-                        ResourceLocation.parse("test:fallback")
+                        new ResourceLocation("test:fallback")
                 )
         );
         assertTrue(context.result().issues().isEmpty());
@@ -540,7 +540,7 @@ class PiSchemaRuntimeTest {
         CompoundTag tag = new CompoundTag();
         PiDecodeContext context = PiDecodeContext.strict();
         UUID fallbackUuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174011");
-        ResourceLocation fallbackLocation = ResourceLocation.parse("test:fallback");
+        ResourceLocation fallbackLocation = new ResourceLocation("test:fallback");
 
         assertTrue(PiSchemaSupport.getField(tag, "active", PiSerializers.BOOLEAN, context, true));
         assertEquals("fallback", PiSchemaSupport.getField(tag, "title", PiSerializers.STRING, context, "fallback"));
@@ -844,11 +844,11 @@ class PiSchemaRuntimeTest {
     void generatedMergeDeltaModesPreserveExistingSetAndMapEntriesDuringDeltaApply() {
         PiStateBinding<GeneratedMergeState> binding = PiSchemas.require(GeneratedMergeState.class);
         GeneratedMergeState state = new GeneratedMergeState();
-        state.checkpoints.add(ResourceLocation.fromNamespaceAndPath("test", "new"));
+        state.checkpoints.add(new ResourceLocation("test", "new"));
         state.weights.put("new", 2);
 
         GeneratedMergeState restored = new GeneratedMergeState();
-        restored.checkpoints.add(ResourceLocation.fromNamespaceAndPath("test", "keep"));
+        restored.checkpoints.add(new ResourceLocation("test", "keep"));
         restored.weights.put("keep", 1);
 
         PiDirtySet dirty = new PiDirtySet()
@@ -859,8 +859,8 @@ class PiSchemaRuntimeTest {
 
         assertEquals(
                 List.of(
-                        ResourceLocation.fromNamespaceAndPath("test", "keep"),
-                        ResourceLocation.fromNamespaceAndPath("test", "new")
+                        new ResourceLocation("test", "keep"),
+                        new ResourceLocation("test", "new")
                 ),
                 List.copyOf(restored.checkpoints)
         );

@@ -36,7 +36,7 @@ class PiPacketApiSurfaceTest {
     void packetBaseTypesExposeSelfWriteAndMetadataMethods() throws Exception {
         TestNoticePacket packet = new TestNoticePacket("", List.of());
 
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "test_notice"), packet.packetId());
+        assertEquals(new ResourceLocation("test", "test_notice"), packet.packetId());
         assertEquals(1, packet.version());
         assertSame(
                 FriendlyByteBuf.class,
@@ -64,7 +64,7 @@ class PiPacketApiSurfaceTest {
                 new PiPacketBinding<>() {
                     @Override
                     public ResourceLocation packetId() {
-                        return ResourceLocation.fromNamespaceAndPath("test", "demo_server");
+                        return new ResourceLocation("test", "demo_server");
                     }
 
                     @Override
@@ -104,7 +104,7 @@ class PiPacketApiSurfaceTest {
                 new PiPacketBinding<>() {
                     @Override
                     public ResourceLocation packetId() {
-                        return ResourceLocation.fromNamespaceAndPath("test", "demo_registry");
+                        return new ResourceLocation("test", "demo_registry");
                     }
 
                     @Override
@@ -175,9 +175,9 @@ class PiPacketApiSurfaceTest {
         assertTrue(found.isPresent());
         assertSame(binding, found.get());
         assertSame(binding, registry.require(DemoServerPacket.class));
-        assertSame(binding, registry.require(ResourceLocation.fromNamespaceAndPath("test", "demo_registry")));
+        assertSame(binding, registry.require(new ResourceLocation("test", "demo_registry")));
         assertThrows(NoSuchElementException.class, () -> registry.require(String.class));
-        assertThrows(NoSuchElementException.class, () -> registry.require(ResourceLocation.fromNamespaceAndPath("test", "missing")));
+        assertThrows(NoSuchElementException.class, () -> registry.require(new ResourceLocation("test", "missing")));
     }
 
     @Test

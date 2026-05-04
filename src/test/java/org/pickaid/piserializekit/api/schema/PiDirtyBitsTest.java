@@ -27,7 +27,7 @@ class PiDirtyBitsTest {
     private static final class DirtyBinding implements PiStateBinding<DirtyState> {
         @Override
         public ResourceLocation schemaId() {
-            return ResourceLocation.fromNamespaceAndPath("test", "dirty_bits");
+            return new ResourceLocation("test", "dirty_bits");
         }
 
         @Override

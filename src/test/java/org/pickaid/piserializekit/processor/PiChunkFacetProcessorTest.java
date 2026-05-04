@@ -43,7 +43,7 @@ class PiChunkFacetProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.CounterChunkFacet_PiChunkDescriptor",
-                "super(ResourceLocation.fromNamespaceAndPath(\"example\", \"counter_chunk\"), CounterChunkFacet.class, CounterState.class);"
+                "super(new ResourceLocation(\"example\", \"counter_chunk\"), CounterChunkFacet.class, CounterState.class);"
         );
         assertGeneratedContains(
                 compilation,

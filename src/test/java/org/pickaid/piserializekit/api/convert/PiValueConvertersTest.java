@@ -83,7 +83,7 @@ class PiValueConvertersTest {
     }
 
     private static ResourceLocation id(String namespace, String path) {
-        return ResourceLocation.fromNamespaceAndPath(namespace, path);
+        return new ResourceLocation(namespace, path);
     }
 
     private record SpellId(ResourceLocation location) {

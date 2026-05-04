@@ -107,12 +107,12 @@ class PiSerializeRuntimeTest {
                 PiRuntimeConflictException.class,
                 () -> {
                     runtime.register(
-                            ResourceLocation.fromNamespaceAndPath("test", "shared"),
+                            new ResourceLocation("test", "shared"),
                             Integer.class,
                             runtime.lookup(PiSerializers.INT).orElseThrow()
                     );
                     runtime.register(
-                            ResourceLocation.fromNamespaceAndPath("test", "shared"),
+                            new ResourceLocation("test", "shared"),
                             String.class,
                             runtime.lookup(PiSerializers.STRING).orElseThrow()
                     );
@@ -142,7 +142,7 @@ class PiSerializeRuntimeTest {
     void duplicateRegistrationForSameIdAndTypeRejectsConflictingSerializerWithOverrideGuidance() {
         PiSerializeRuntime runtime = new PiSerializeRuntime();
         PiBuiltInSerializers.install(runtime);
-        ResourceLocation sharedId = ResourceLocation.fromNamespaceAndPath("test", "shared_string");
+        ResourceLocation sharedId = new ResourceLocation("test", "shared_string");
         PiSerializer<String> first = constantStringSerializer("first");
         PiSerializer<String> second = constantStringSerializer("second");
 
@@ -177,7 +177,7 @@ class PiSerializeRuntimeTest {
     void requireSerializerReportsKnownIdsWhenSerializerIsMissing() {
         PiSerializeRuntime runtime = new PiSerializeRuntime();
         PiBuiltInSerializers.install(runtime);
-        PiSerializerType<String> missingType = new PiSerializerType<>(ResourceLocation.fromNamespaceAndPath("test", "missing_string"), String.class);
+        PiSerializerType<String> missingType = new PiSerializerType<>(new ResourceLocation("test", "missing_string"), String.class);
 
         PiRuntimeLookupException exception = assertThrows(
                 PiRuntimeLookupException.class,
@@ -192,7 +192,7 @@ class PiSerializeRuntimeTest {
     @Test
     void emptyRuntimeMissingSerializerMessageIncludesBootstrapHint() {
         PiSerializeRuntime runtime = new PiSerializeRuntime();
-        PiSerializerType<String> missingType = new PiSerializerType<>(ResourceLocation.fromNamespaceAndPath("test", "missing_string"), String.class);
+        PiSerializerType<String> missingType = new PiSerializerType<>(new ResourceLocation("test", "missing_string"), String.class);
 
         PiRuntimeLookupException exception = assertThrows(
                 PiRuntimeLookupException.class,
@@ -209,7 +209,7 @@ class PiSerializeRuntimeTest {
     void requireSerializerReportsRegisteredJavaTypeWhenIdExistsWithDifferentType() {
         PiSerializeRuntime runtime = new PiSerializeRuntime();
         PiBuiltInSerializers.install(runtime);
-        ResourceLocation sharedId = ResourceLocation.fromNamespaceAndPath("test", "shared");
+        ResourceLocation sharedId = new ResourceLocation("test", "shared");
         runtime.register(sharedId, Integer.class, runtime.lookup(PiSerializers.INT).orElseThrow());
 
         PiRuntimeLookupException exception = assertThrows(
@@ -313,8 +313,8 @@ class PiSerializeRuntimeTest {
         var arraySerializer = PiSerializers.arrayOf(ResourceLocation[].class, resourceLocationSerializer);
 
         List<ResourceLocation> locations = List.of(
-                ResourceLocation.fromNamespaceAndPath("test", "one"),
-                ResourceLocation.fromNamespaceAndPath("test", "two")
+                new ResourceLocation("test", "one"),
+                new ResourceLocation("test", "two")
         );
         ResourceLocation[] locationArray = locations.toArray(ResourceLocation[]::new);
         Set<String> names = Set.of("alice", "bob");
@@ -365,8 +365,8 @@ class PiSerializeRuntimeTest {
         var arraySerializer = PiSerializers.arrayOf(ResourceLocation[].class, resourceLocationSerializer);
 
         List<ResourceLocation> locations = List.of(
-                ResourceLocation.fromNamespaceAndPath("test", "one"),
-                ResourceLocation.fromNamespaceAndPath("test", "two")
+                new ResourceLocation("test", "one"),
+                new ResourceLocation("test", "two")
         );
         Set<String> names = new LinkedHashSet<>(List.of("alice", "bob"));
         Map<String, Integer> counts = new LinkedHashMap<>();
@@ -413,8 +413,8 @@ class PiSerializeRuntimeTest {
         var mapSerializer = PiSerializers.mapOf(stringSerializer, intSerializer);
 
         CompoundTag encodedList = listSerializer.nbtCodec().encode(List.of(
-                ResourceLocation.fromNamespaceAndPath("test", "one"),
-                ResourceLocation.fromNamespaceAndPath("test", "two")
+                new ResourceLocation("test", "one"),
+                new ResourceLocation("test", "two")
         ));
         CompoundTag encodedSet = setSerializer.nbtCodec().encode(new LinkedHashSet<>(List.of("alice", "bob")));
         Map<String, Integer> encodedCounts = new LinkedHashMap<>();
@@ -422,14 +422,14 @@ class PiSerializeRuntimeTest {
         encodedCounts.put("gold", 7);
         CompoundTag encodedMap = mapSerializer.nbtCodec().encode(encodedCounts);
 
-        List<ResourceLocation> listTarget = new ArrayList<>(List.of(ResourceLocation.fromNamespaceAndPath("stale", "entry")));
+        List<ResourceLocation> listTarget = new ArrayList<>(List.of(new ResourceLocation("stale", "entry")));
         Set<String> setTarget = new LinkedHashSet<>(List.of("stale"));
         Map<String, Integer> mapTarget = new LinkedHashMap<>(Map.of("stale", 99));
 
         assertSame(listTarget, listSerializer.nbtCodec().decodeInto(encodedList, listTarget));
         assertEquals(List.of(
-                ResourceLocation.fromNamespaceAndPath("test", "one"),
-                ResourceLocation.fromNamespaceAndPath("test", "two")
+                new ResourceLocation("test", "one"),
+                new ResourceLocation("test", "two")
         ), listTarget);
 
         assertSame(setTarget, setSerializer.nbtCodec().decodeInto(encodedSet, setTarget));

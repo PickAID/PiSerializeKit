@@ -55,7 +55,7 @@ public final class PiProcessorPacketGenerationSupport {
                 writer.write("import org.pickaid.piserializekit.runtime.schema.support.PiSchemaSupport;\n\n");
                 writer.write("public final class " + target.simpleName() + " {\n");
                 writer.write("    public static final int VERSION = " + packetSpec.version() + ";\n");
-                writer.write("    public static final ResourceLocation PACKET_ID = ResourceLocation.fromNamespaceAndPath(\"" + packetSpec.namespace() + "\", \"" + packetSpec.path() + "\");\n");
+                writer.write("    public static final ResourceLocation PACKET_ID = new ResourceLocation(\"" + packetSpec.namespace() + "\", \"" + packetSpec.path() + "\");\n");
                 if (!packetSpec.fields().isEmpty()) {
                     writer.write("\n");
                     for (PiFieldSpec field : packetSpec.fields()) {
@@ -248,7 +248,7 @@ public final class PiProcessorPacketGenerationSupport {
                 case "java.lang.Double" -> "0D";
                 case "java.lang.String" -> "\"\"";
                 case "java.util.UUID" -> "new java.util.UUID(0L, 0L)";
-                case "net.minecraft.resources.ResourceLocation" -> "ResourceLocation.fromNamespaceAndPath(\"minecraft\", \"empty\")";
+                case "net.minecraft.resources.ResourceLocation" -> "new ResourceLocation(\"minecraft\", \"empty\")";
                 case "net.minecraft.nbt.CompoundTag" -> "new CompoundTag()";
                 case "net.minecraft.core.BlockPos" -> "net.minecraft.core.BlockPos.ZERO";
                 case "net.minecraft.world.phys.Vec3" -> "net.minecraft.world.phys.Vec3.ZERO";

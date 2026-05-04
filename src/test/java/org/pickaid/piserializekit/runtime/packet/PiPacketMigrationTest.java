@@ -30,13 +30,13 @@ class PiPacketMigrationTest {
         buffer.writeVarInt(1);
         PiSerializeServices.require().lookup(PiSerializers.RESOURCE_LOCATION).orElseThrow().packetCodec().write(
                 buffer,
-                ResourceLocation.fromNamespaceAndPath("example", "blink")
+                new ResourceLocation("example", "blink")
         );
 
         PiDecodeContext context = PiDecodeContext.strict();
         LegacySkillPacket decoded = binding.codec().read(buffer, context);
 
-        assertEquals(ResourceLocation.fromNamespaceAndPath("example", "blink"), decoded.skillId);
+        assertEquals(new ResourceLocation("example", "blink"), decoded.skillId);
         assertEquals(BlockPos.ZERO, decoded.target);
         assertEquals(2, binding.version());
         List<PiSchemaMigration> migrations = binding.migrations();

@@ -140,7 +140,7 @@ class PiLevelFacetProcessorTest {
         assertGeneratedContains(
                 compilation,
                 "example.CounterLevelFacet_PiLevelDescriptor",
-                "super(ResourceLocation.fromNamespaceAndPath(\"example\", \"counter_level\"), CounterLevelFacet.class, CounterState.class);"
+                "super(new ResourceLocation(\"example\", \"counter_level\"), CounterLevelFacet.class, CounterState.class);"
         );
         assertGeneratedContains(
                 compilation,
