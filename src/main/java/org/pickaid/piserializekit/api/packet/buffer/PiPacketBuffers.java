@@ -1,5 +1,6 @@
 package org.pickaid.piserializekit.api.packet.buffer;
 
+import io.netty.buffer.Unpooled;
 import java.util.Objects;
 import net.minecraft.network.FriendlyByteBuf;
 
@@ -12,6 +13,10 @@ public final class PiPacketBuffers {
 
     public static PiPacketBuffer wrap(FriendlyByteBuf buffer) {
         return new PiFriendlyPacketBuffer(buffer);
+    }
+
+    public static PiPacketBuffer heap() {
+        return wrap(new FriendlyByteBuf(Unpooled.buffer()));
     }
 
     public static FriendlyByteBuf unwrap(PiPacketBuffer buffer) {

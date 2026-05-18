@@ -28,13 +28,12 @@ public final class CastSkillPacket extends PiServerPacket {
 调试或桥接底层 transport 时，可以直接编解码：
 
 ```java
-FriendlyByteBuf raw = new FriendlyByteBuf(Unpooled.buffer());
+PiPacketBuffer buffer = PiPacketBuffers.heap();
 CastSkillPacket packet = new CastSkillPacket("fireball", 2);
 
-PiPackets.write(raw, packet);
-raw.readerIndex(0);
+PiPackets.write(buffer, packet);
 
-CastSkillPacket decoded = PiPackets.read(CastSkillPacket.class, raw);
+CastSkillPacket decoded = PiPackets.read(CastSkillPacket.class, buffer);
 ```
 
 迁移旧 packet 时用 `@PiPacketUpgrade`。旧版 packet 解码失败会保留结构化 decode issue，方便定位是字段缺失、类型不对，还是 migration 本身失败。

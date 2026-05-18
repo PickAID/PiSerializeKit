@@ -13,6 +13,7 @@
 
 - 注解：`@PiSyncModel`、`@PiField`、`@PiPacket`
 - 运行时：`PiSchemas`、`PiPackets`、`PiSerializeServices`
+- runtime payload：`PiRuntimePayload`、`PiRuntimePayloadBinding`
 - serializer：`PiSerializer`、`PiSerializers`
 - 对象结构检查：`PiObjectInspector`
 

@@ -28,13 +28,12 @@ Most projects should not hand-write buffer registration. PiSerializeKit generate
 For debugging or low-level transport bridges, you can encode and decode directly:
 
 ```java
-FriendlyByteBuf raw = new FriendlyByteBuf(Unpooled.buffer());
+PiPacketBuffer buffer = PiPacketBuffers.heap();
 CastSkillPacket packet = new CastSkillPacket("fireball", 2);
 
-PiPackets.write(raw, packet);
-raw.readerIndex(0);
+PiPackets.write(buffer, packet);
 
-CastSkillPacket decoded = PiPackets.read(CastSkillPacket.class, raw);
+CastSkillPacket decoded = PiPackets.read(CastSkillPacket.class, buffer);
 ```
 
 Use `@PiPacketUpgrade` for older packet versions. Legacy decode failures preserve structured decode issues so the error can point at the missing field, wrong type, or failing migration step.

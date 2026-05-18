@@ -13,6 +13,7 @@ Current mainline documentation:
 
 - Annotations: `@PiSyncModel`, `@PiField`, `@PiPacket`
 - Runtime: `PiSchemas`, `PiPackets`, `PiSerializeServices`
+- Runtime payloads: `PiRuntimePayload`, `PiRuntimePayloadBinding`
 - Serializers: `PiSerializer`, `PiSerializers`
 - Object inspection: `PiObjectInspector`
 
